@@ -1,48 +1,72 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Numeric, DateTime, Date
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, BigInteger, String, DateTime, Date, Text, Numeric, CheckConstraint
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import TIMESTAMP
 from app.core.database import Base
 
 
 class Project(Base):
-    __tablename__ = "projects"
+    __tablename__ = "perdix_mp_projects"
+    
+    id = Column(BigInteger, primary_key=True, index=True)
+    
+    # Organization Information
+    organization_type = Column(String(255), nullable=False)
+    organization_id = Column(String(255), nullable=False)
+    
+    # Project Identification
+    project_reference_id = Column(String(100), nullable=False, unique=True, index=True)
+    title = Column(String(500), nullable=False)
+    department = Column(String(200), nullable=True)
+    contact_person = Column(String(255), nullable=False)
+    
+    # Project Overview
+    category = Column(String(100), nullable=True)  # Infrastructure, Sanitation, Water Supply, Transportation, Renewable Energy
+    project_stage = Column(String(50), default='planning', nullable=True)
+    description = Column(Text, nullable=True)
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+    
+    # Financial Information
+    total_project_cost = Column(Numeric(15, 2), nullable=True)
+    funding_requirement = Column(Numeric(15, 2), nullable=False)
+    already_secured_funds = Column(Numeric(15, 2), default=0, nullable=True)
+    commitment_gap = Column(Numeric(15, 2), nullable=True)  # Generated column - read-only
+    currency = Column(String(10), default='INR', nullable=True)
+    
+    # Fundraising Timeline
+    fundraising_start_date = Column(TIMESTAMP(timezone=True), nullable=True)
+    fundraising_end_date = Column(TIMESTAMP(timezone=True), nullable=True)
+    
+    # Credit & Rating
+    municipality_credit_rating = Column(String(20), nullable=True)
+    municipality_credit_score = Column(Numeric(5, 2), nullable=True)
+    
+    # Status & Workflow
+    status = Column(String(50), default='draft', nullable=True)
+    visibility = Column(String(50), default='private', nullable=True)
+    
+    # Calculated Fields
+    funding_raised = Column(Numeric(15, 2), default=0, nullable=True)
+    funding_percentage = Column(Numeric(5, 2), nullable=True)  # Generated column - read-only
+    
+    # Source & Audit
+    approved_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    approved_by = Column(String(255), nullable=True)
+    admin_notes = Column(Text, nullable=True)
+    
+    # Timestamps
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=True)
+    created_by = Column(String(255), nullable=True)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=True)
+    updated_by = Column(String(255), nullable=True)
+    
+    # Add check constraints
+    __table_args__ = (
+        CheckConstraint("project_stage IN ('planning', 'initiated', 'in_progress')", name="check_project_stage"),
+        CheckConstraint(
+            "status IN ('draft', 'pending_validation', 'active', 'funding_completed', 'closed', 'rejected')",
+            name="check_status"
+        ),
+        CheckConstraint("visibility IN ('private', 'public')", name="check_visibility"),
+    )
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    
-    # Core project fields (P1, required)
-    project_title = Column(Text, nullable=False)
-    project_category = Column(String(50), nullable=False)  # Water | Sanitation | Roads | Energy | Other
-    project_stage = Column(String(50), nullable=False)  # planning | initiated | in_progress
-    description = Column(Text, nullable=False)
-    location = Column(Text, nullable=False)  # state, city, ward
-    municipality_id = Column(String(191), nullable=True)
-    start_date = Column(Date)
-    end_date = Column(Date)
-    
-    # Financials (P1, required)
-    total_project_cost = Column(Numeric(18, 2), nullable=False)
-    funding_required = Column(Numeric(18, 2), nullable=False)
-    funds_secured = Column(Numeric(18, 2), default=0)
-    funding_gap = Column(Numeric(18, 2), default=0)  # auto-calculated
-    
-    # Media and disclosures
-    media = Column(Text)  # JSON: banner_image, photos, videos
-    disclosures_summary = Column(Text)
-    
-    # Admin validation
-    admin_validation_checklist = Column(Text)  # JSON: pass/fail + comments
-    
-    # Status and metadata
-    status = Column(String(50), default="draft")  # draft | pending_validation | active | closed | rejected
-    notes = Column(Text)
-    
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-    # Relationships
-    user = relationship("User", back_populates="projects")
-    documents = relationship("Document", back_populates="project", cascade="all, delete-orphan")
-    commitments = relationship("Commitment", back_populates="project", cascade="all, delete-orphan")
-    access_grants = relationship("AccessGrant", back_populates="project", cascade="all, delete-orphan")
-    allocations = relationship("Allocation", back_populates="project", cascade="all, delete-orphan")

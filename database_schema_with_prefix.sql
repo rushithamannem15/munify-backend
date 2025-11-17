@@ -14,7 +14,9 @@ Create table perdix_mp_organization_types (
     organization_type_description TEXT NOT NULL ,
     status VARCHAR(50) NOT NULL CHECK (status IN ('A', 'I')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255),
    UNIQUE (organization_type)
 );
 
@@ -24,7 +26,9 @@ CREATE TABLE perdix_mp_roles_master (
     role_description TEXT NOT NULL ,
     status VARCHAR(50) NOT NULL CHECK (status IN ('A', 'I')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255),
     UNIQUE (role_name)
 );
 
@@ -40,19 +44,20 @@ CREATE TABLE perdix_mp_users_details (
     user_email VARCHAR(255) NOT NULL,
     user_mobile_number VARCHAR(20),
     designation VARCHAR(100),
-    -- registration_number VARCHAR(100),
+    registration_number VARCHAR(100),
     is_t&c_accepted BOOLEAN DEFAULT FALSE,
-    -- state VARCHAR(100),
-    -- district VARCHAR(100),
-    -- gstn_ulb_code VARCHAR(50),
-    -- annual_budget_size DECIMAL(15, 2),
+    state VARCHAR(100),
+    district VARCHAR(100),
+    gstn_ulb_code VARCHAR(50),
+    annual_budget_size DECIMAL(15, 2),
     status VARCHAR(50) ,
     is_mobile_verified BOOLEAN DEFAULT FALSE,
     mobile_verified_at TIMESTAMP WITH TIME ZONE,
-    is_email_verified BOOLEAN DEFAULT FALSE,
-    email_verified_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255),
+    file_id BIGINT REFERENCES perdix_mp_files(id),
     UNIQUE (user_id)
 );
 
@@ -65,7 +70,9 @@ create table perdix_mp_document_master (
     document_description TEXT NOT NULL ,
     status VARCHAR(50) NOT NULL CHECK (status IN ('A', 'I')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255),
     UNIQUE (organization_type, document_category, document_type)
 );
 
@@ -75,7 +82,9 @@ create table perdix_mp_kyc_documents (
     document_type VARCHAR(255) NOT NULL ,
     document_url VARCHAR(255) NOT NULL ,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255),
     UNIQUE (user_id, document_type)
 );
 
@@ -85,6 +94,9 @@ create table perdix_mp_user_auth_audit_trails (
     action VARCHAR(50) NOT NULL CHECK (action IN ('login', 'logout', 'password_reset', 'email_verification', 'phone_verification')),
     action_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 -- ============================================
@@ -99,12 +111,16 @@ CREATE TABLE perdix_mp_otps (
     purpose VARCHAR(50) NOT NULL CHECK (purpose IN ('registration', 'login', 'password_reset', 'email_verification', 'phone_verification')),
     resend_count INT DEFAULT 0,
     last_resent_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 -- Invitations (Phase 1 - Invitation Only Onboarding)
 CREATE TABLE perdix_mp_invites (
     id BIGSERIAL PRIMARY KEY,
+    token VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
     mobile_number VARCHAR(20) NOT NULL,
     user_id varchar(255) NOT NULL,
@@ -117,10 +133,11 @@ CREATE TABLE perdix_mp_invites (
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     accepted_at TIMESTAMP WITH TIME ZONE,
     resend_count INT DEFAULT 0,
-    last_resent_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (email, mobile_number, user_id)
+    updated_by VARCHAR(255),
+    UNIQUE (email, mobile_number, user_id,token)
 );
 
 -- Refresh Tokens
@@ -133,6 +150,9 @@ CREATE TABLE perdix_mp_access_tokens (
     user_agent VARCHAR(255) NOT NULL ,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255),
     UNIQUE (user_id, token_hash)
 );
 
@@ -173,7 +193,9 @@ CREATE TABLE perdix_mp_fee_configurations (
     
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255),
     UNIQUE (organization_type)
 );
 
@@ -182,7 +204,7 @@ CREATE TABLE perdix_mp_fee_transactions (
     id BIGSERIAL PRIMARY KEY,
     organization_type VARCHAR(255) NOT NULL ,
     organization_id varchar(255) NOT NULL ,
-    project_id varchar(255) NOT NULL ,
+    project_id varchar(255) NULL ,
     
     -- Transaction Details
     transaction_type VARCHAR(50) NOT NULL CHECK (transaction_type IN ('subscription', 'subscription_renewal', 'listing_fee', 'commitment_fee', 'success_fee')),
@@ -214,7 +236,9 @@ CREATE TABLE perdix_mp_fee_transactions (
     description TEXT,
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 -- Subscription Renewals Tracking
@@ -232,7 +256,9 @@ CREATE TABLE perdix_mp_subscription_renewals (
     
     paid_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 -- ============================================
@@ -255,7 +281,6 @@ CREATE TABLE perdix_mp_projects (
     category VARCHAR(100), -- Infrastructure, Sanitation, Water Supply, Transportation, Renewable Energy
     project_stage VARCHAR(50) DEFAULT 'planning' CHECK (project_stage IN ('planning', 'initiated', 'in_progress')),
     description TEXT,
-    short_description VARCHAR(500),
     start_date DATE,
     end_date DATE,
     
@@ -270,20 +295,6 @@ CREATE TABLE perdix_mp_projects (
     fundraising_start_date TIMESTAMP WITH TIME ZONE,
     fundraising_end_date TIMESTAMP WITH TIME ZONE, -- Closure date for commitments
     
-    -- Documentation
-    has_dpr BOOLEAN DEFAULT FALSE, -- Detailed Project Report
-    has_feasibility_study BOOLEAN DEFAULT FALSE,
-    has_compliance_certificates BOOLEAN DEFAULT FALSE,
-    has_budget_approvals BOOLEAN DEFAULT FALSE,
-    has_tender_documents BOOLEAN DEFAULT FALSE,
-    
-    -- Media & Transparency
-    project_image_url VARCHAR(500),
-    location_city VARCHAR(100),
-    location_state VARCHAR(100),
-    location_district VARCHAR(100),
-    location_coordinates POINT,
-    media_files JSONB DEFAULT '[]', -- Videos, photos, infographics
     
     -- Credit & Rating
     municipality_credit_rating VARCHAR(20),
@@ -293,10 +304,8 @@ CREATE TABLE perdix_mp_projects (
     status VARCHAR(50) DEFAULT 'draft' CHECK (status IN (
         'draft', 
         'pending_validation', 
-        'action_required', 
         'active', 
-        'funding_completed', 
-        'implementation_in_progress', 
+        'funding_completed',
         'closed',
         'rejected'
     )),
@@ -311,17 +320,15 @@ CREATE TABLE perdix_mp_projects (
     ) STORED,
     
     -- Source & Audit
-    created_by_source VARCHAR(50) DEFAULT 'municipality' CHECK (created_by_source IN ('municipality', 'admin')),
-    created_by varchar(255) NOT NULL ,
-    submitted_at TIMESTAMP WITH TIME ZONE,
     approved_at TIMESTAMP WITH TIME ZONE,
     approved_by varchar(255) NOT NULL ,
     admin_notes TEXT,
     
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP WITH TIME ZONE
+    updated_by VARCHAR(255),
 );
 
 -- Project Documents
@@ -336,7 +343,9 @@ CREATE TABLE perdix_mp_project_documents (
     
     uploaded_by varchar(255) NOT NULL ,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 -- Project Progress Updates (BRD MUNI06c)
@@ -346,13 +355,26 @@ CREATE TABLE perdix_mp_project_progress_updates (
     
     milestone_title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
-    progress_percentage DECIMAL(5, 2), -- % completion
-    work_completed TEXT,
     
-    media_files JSONB DEFAULT '[]', -- Photos, videos
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
+);
+
+-- Project Progress Update Media Files
+CREATE TABLE perdix_mp_project_progress_update_media (
+    id BIGSERIAL PRIMARY KEY,
+    progress_update_id BIGINT NOT NULL REFERENCES perdix_mp_project_progress_updates(id) ON DELETE CASCADE,
+    file_id BIGINT NOT NULL REFERENCES perdix_mp_files(id),
     
-    posted_by varchar(255) NOT NULL ,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    media_type VARCHAR(50) NOT NULL CHECK (media_type IN ('photo', 'video', 'document')),
+    display_order INT DEFAULT 0, -- For ordering media files
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 -- ============================================
@@ -376,8 +398,6 @@ CREATE TABLE perdix_mp_commitments (
     -- Terms & Conditions (BRD: 250 words free-text)
     terms_conditions_text TEXT, -- Free text field for lenders
     
-    -- Supporting Documents (BRD: sanction letter, approval note)
-    supporting_documents JSONB DEFAULT '[]', -- Array of file IDs
     
     -- Status & Workflow
     status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('draft', 'pending', 'under_review', 'approved', 'rejected', 'withdrawn', 'funded', 'completed')),
@@ -385,8 +405,6 @@ CREATE TABLE perdix_mp_commitments (
     is_locked BOOLEAN DEFAULT FALSE,
     
     -- Approval
-    reviewed_by VARCHAR(255) NOT NULL ,
-    reviewed_at TIMESTAMP WITH TIME ZONE,
     approved_by VARCHAR(255) NOT NULL ,
     approved_at TIMESTAMP WITH TIME ZONE,
     rejection_reason TEXT,
@@ -396,12 +414,13 @@ CREATE TABLE perdix_mp_commitments (
     acknowledgment_receipt_url VARCHAR(500),
     acknowledgment_generated_at TIMESTAMP WITH TIME ZONE,
     
-    -- Audit
-    previous_amount DECIMAL(15, 2), -- For tracking updates
+     -- For tracking updates
     update_count INT DEFAULT 0,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 
@@ -420,8 +439,10 @@ CREATE TABLE perdix_mp_commitment_history (
     status VARCHAR(50),
     
     action VARCHAR(50), -- created, updated, withdrawn
-    action_by VARCHAR(255) NOT NULL ,
-    action_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 -- Commitment Documents
@@ -432,7 +453,10 @@ CREATE TABLE perdix_mp_commitment_documents (
     document_type VARCHAR(100) NOT NULL, -- sanction_letter, approval_note, kyc, terms_sheet, due_diligence
     is_required BOOLEAN DEFAULT TRUE,
     uploaded_by varchar(255) NOT NULL ,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 -- Commitment Comments/Notes
@@ -443,7 +467,9 @@ CREATE TABLE perdix_mp_commitment_comments (
     comment TEXT NOT NULL,
     is_internal BOOLEAN DEFAULT FALSE, -- Internal admin notes
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 -- ============================================
@@ -465,7 +491,9 @@ CREATE TABLE perdix_mp_questions (
     priority VARCHAR(20) DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 -- Question Replies
@@ -479,7 +507,9 @@ CREATE TABLE perdix_mp_question_replies (
     document_links TEXT, -- BRD: Response may provide link to documents
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 -- Q&A Sessions (BRD MUNI06b - Offline Zoom/Teams meetings)
@@ -517,7 +547,9 @@ CREATE TABLE perdix_mp_qa_sessions (
     status VARCHAR(50) DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'in_progress', 'completed', 'cancelled')),
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 
@@ -533,22 +565,20 @@ CREATE TABLE perdix_mp_requests (
     commitment_id VARCHAR(255) NOT NULL REFERENCES perdix_mp_commitments(id) ON DELETE CASCADE,
     
     requesting_org_id varchar(255) NOT NULL ,
-    target_org_id varchar(255) NOT NULL ,
-    requested_by varchar(255) NOT NULL ,
     
     request_type VARCHAR(50) NOT NULL CHECK (request_type IN ('additional_document', 'meeting', 'clarification', 'information')),
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
-    required_documents JSONB DEFAULT '[]', -- List of document types needed
-    
     priority VARCHAR(20) DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
     status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'cancelled')),
     
-    due_date TIMESTAMP WITH TIME ZONE,
+
     completed_at TIMESTAMP WITH TIME ZONE,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 -- Send-backs (Lender responses)
@@ -565,7 +595,9 @@ CREATE TABLE perdix_mp_send_backs (
     remarks TEXT,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 -- ============================================
@@ -592,7 +624,9 @@ CREATE TABLE perdix_mp_files (
     is_deleted BOOLEAN DEFAULT FALSE,
     deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 );
 
 -- ============================================
@@ -606,6 +640,9 @@ CREATE TABLE perdix_mp_project_favorites (
     organization_id varchar(255) NOT NULL ,
     user_id varchar(255) NOT NULL ,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255),
     UNIQUE(project_id, organization_id, user_id)
 );
 
@@ -614,14 +651,15 @@ CREATE TABLE perdix_mp_project_notes (
     id BIGSERIAL PRIMARY KEY,
     project_id VARCHAR(255) NOT NULL REFERENCES perdix_mp_projects(project_reference_id) ON DELETE CASCADE,
     organization_id varchar(255) NOT NULL ,
-    created_by varchar(255) NOT NULL ,
     
     title VARCHAR(255),
     content TEXT NOT NULL, -- BRD: 5,000 characters limit
     tags JSONB DEFAULT '[]',
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255),
     
     CONSTRAINT content_length_check CHECK (LENGTH(content) <= 5000)
 );
@@ -633,7 +671,9 @@ CREATE TABLE perdix_mp_project_engagements (
     favorite_count INT DEFAULT 0,
     commitment_count INT DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
 )
 
 
@@ -716,6 +756,12 @@ CREATE INDEX idx_perdix_mp_project_documents_document_type ON perdix_mp_project_
 -- Project Progress Updates
 CREATE INDEX idx_perdix_mp_project_progress_updates_project_id ON perdix_mp_project_progress_updates(project_id);
 CREATE INDEX idx_perdix_mp_project_progress_updates_created_at ON perdix_mp_project_progress_updates(created_at DESC);
+
+-- Project Progress Update Media
+CREATE INDEX idx_perdix_mp_project_progress_update_media_progress_update_id ON perdix_mp_project_progress_update_media(progress_update_id);
+CREATE INDEX idx_perdix_mp_project_progress_update_media_file_id ON perdix_mp_project_progress_update_media(file_id);
+CREATE INDEX idx_perdix_mp_project_progress_update_media_media_type ON perdix_mp_project_progress_update_media(media_type);
+CREATE INDEX idx_perdix_mp_project_progress_update_media_display_order ON perdix_mp_project_progress_update_media(progress_update_id, display_order);
 
 -- Commitments
 CREATE INDEX idx_perdix_mp_commitments_project_id ON perdix_mp_commitments(project_id);
@@ -843,6 +889,8 @@ CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON perdix_mp_projects FO
 CREATE TRIGGER update_commitments_updated_at BEFORE UPDATE ON perdix_mp_commitments FOR EACH ROW EXECUTE FUNCTION perdix_mp_update_updated_at_column();
 CREATE TRIGGER update_questions_updated_at BEFORE UPDATE ON perdix_mp_questions FOR EACH ROW EXECUTE FUNCTION perdix_mp_update_updated_at_column();
 CREATE TRIGGER update_requests_updated_at BEFORE UPDATE ON perdix_mp_requests FOR EACH ROW EXECUTE FUNCTION perdix_mp_update_updated_at_column();
+CREATE TRIGGER update_project_progress_updates_updated_at BEFORE UPDATE ON perdix_mp_project_progress_updates FOR EACH ROW EXECUTE FUNCTION perdix_mp_update_updated_at_column();
+CREATE TRIGGER update_project_progress_update_media_updated_at BEFORE UPDATE ON perdix_mp_project_progress_update_media FOR EACH ROW EXECUTE FUNCTION perdix_mp_update_updated_at_column();
 
 -- ============================================
 -- TRIGGER: Update project funding_raised when commitment approved

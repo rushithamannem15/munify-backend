@@ -1,83 +1,108 @@
-from pydantic import BaseModel, Field
-from typing import Optional, Literal
-from datetime import datetime, date
+from pydantic import BaseModel, Field, ConfigDict
+from typing import Optional
 from decimal import Decimal
-from pydantic import ConfigDict
+from datetime import date, datetime
 
 
 class ProjectCreate(BaseModel):
-    """Schema for creating a new project"""
-    user_id: int
-    project_title: str
-    project_category: Literal["Water", "Sanitation", "Roads", "Energy", "Other"]
-    project_stage: Literal["planning", "initiated", "in_progress"]
-    description: str
-    location: str  # state, city, ward
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
+    organization_type: str = Field(..., description="Type of organization")
+    organization_id: str = Field(..., description="Organization ID")
+    title: str = Field(..., max_length=500, description="Project title")
+    department: Optional[str] = Field(None, max_length=200, description="Department name")
+    contact_person: str = Field(..., max_length=255, description="Contact person name")
+    category: Optional[str] = Field(None, max_length=100, description="Project category")
+    project_stage: Optional[str] = Field('planning', description="Project stage: planning, initiated, in_progress")
+    description: Optional[str] = Field(None, description="Project description")
+    start_date: Optional[date] = Field(None, description="Project start date")
+    end_date: Optional[date] = Field(None, description="Project end date")
+    total_project_cost: Optional[Decimal] = Field(None, description="Total project cost")
+    funding_requirement: Decimal = Field(..., description="Funding requirement amount")
+    already_secured_funds: Optional[Decimal] = Field(0, description="Already secured funds")
+    currency: Optional[str] = Field('INR', max_length=10, description="Currency code")
+    fundraising_start_date: Optional[datetime] = Field(None, description="Fundraising start date")
+    fundraising_end_date: Optional[datetime] = Field(None, description="Fundraising end date")
+    municipality_credit_rating: Optional[str] = Field(None, max_length=20, description="Municipality credit rating")
+    municipality_credit_score: Optional[Decimal] = Field(None, description="Municipality credit score")
+    status: Optional[str] = Field('draft', description="Project status")
+    visibility: Optional[str] = Field('private', description="Project visibility: private or public")
+    approved_by: Optional[str] = Field(None, max_length=255, description="User who approved the project")
+    admin_notes: Optional[str] = Field(None, description="Administrative notes")
+    created_by: Optional[str] = Field(None, max_length=255, description="User who created the project")
     
-    # Financials
-    total_project_cost: Decimal
-    funding_required: Decimal
-    funds_secured: Optional[Decimal] = Decimal('0')
-    funding_gap: Optional[Decimal] = Decimal('0')  # auto-calculated
-    
-    # Media and disclosures
-    media: Optional[str] = None  # JSON: banner_image, photos, videos
-    disclosures_summary: Optional[str] = None
-    
-    # Admin validation
-    admin_validation_checklist: Optional[str] = None  # JSON: pass/fail + comments
-    
-    # Status and metadata
-    status: Optional[Literal["draft", "pending_validation", "active", "closed", "rejected"]] = "draft"
-    notes: Optional[str] = None
-    municipality_id: str
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectUpdate(BaseModel):
-    """Schema for updating a project"""
-    project_title: Optional[str] = None
-    project_category: Optional[Literal["Water", "Sanitation", "Roads", "Energy", "Other"]] = None
-    project_stage: Optional[Literal["planning", "initiated", "in_progress"]] = None
+    organization_type: Optional[str] = Field(None, description="Type of organization")
+    organization_id: Optional[str] = Field(None, description="Organization ID")
+    title: Optional[str] = Field(None, max_length=500, description="Project title")
+    department: Optional[str] = Field(None, max_length=200, description="Department name")
+    contact_person: Optional[str] = Field(None, max_length=255, description="Contact person name")
+    category: Optional[str] = Field(None, max_length=100, description="Project category")
+    project_stage: Optional[str] = Field(None, description="Project stage: planning, initiated, in_progress")
+    description: Optional[str] = Field(None, description="Project description")
+    start_date: Optional[date] = Field(None, description="Project start date")
+    end_date: Optional[date] = Field(None, description="Project end date")
+    total_project_cost: Optional[Decimal] = Field(None, description="Total project cost")
+    funding_requirement: Optional[Decimal] = Field(None, description="Funding requirement amount")
+    already_secured_funds: Optional[Decimal] = Field(None, description="Already secured funds")
+    currency: Optional[str] = Field(None, max_length=10, description="Currency code")
+    fundraising_start_date: Optional[datetime] = Field(None, description="Fundraising start date")
+    fundraising_end_date: Optional[datetime] = Field(None, description="Fundraising end date")
+    municipality_credit_rating: Optional[str] = Field(None, max_length=20, description="Municipality credit rating")
+    municipality_credit_score: Optional[Decimal] = Field(None, description="Municipality credit score")
+    status: Optional[str] = Field(None, description="Project status")
+    visibility: Optional[str] = Field(None, description="Project visibility: private or public")
+    approved_at: Optional[datetime] = Field(None, description="Approval timestamp")
+    approved_by: Optional[str] = Field(None, max_length=255, description="User who approved the project")
+    admin_notes: Optional[str] = Field(None, description="Administrative notes")
+    updated_by: Optional[str] = Field(None, max_length=255, description="User who updated the project")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProjectResponse(BaseModel):
+    id: int
+    organization_type: str
+    organization_id: str
+    project_reference_id: str
+    title: str
+    department: Optional[str] = None
+    contact_person: str
+    category: Optional[str] = None
+    project_stage: Optional[str] = None
     description: Optional[str] = None
-    location: Optional[str] = None
-    municipality_id: Optional[str] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     total_project_cost: Optional[Decimal] = None
-    funding_required: Optional[Decimal] = None
-    funds_secured: Optional[Decimal] = None
-    funding_gap: Optional[Decimal] = None
-    media: Optional[str] = None
-    disclosures_summary: Optional[str] = None
-    admin_validation_checklist: Optional[str] = None
-    status: Optional[Literal["draft", "pending_validation", "active", "closed", "rejected"]] = None
-    notes: Optional[str] = None
-
-
-class Project(BaseModel):
-    """Schema for project response"""
-    id: int
-    user_id: int
-    project_title: str
-    project_category: Literal["Water", "Sanitation", "Roads", "Energy", "Other"]
-    project_stage: Literal["planning", "initiated", "in_progress"]
-    description: str
-    location: str
-    municipality_id: Optional[str] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    total_project_cost: Decimal
-    funding_required: Decimal
-    funds_secured: Decimal
-    funding_gap: Decimal
-    media: Optional[str] = None
-    disclosures_summary: Optional[str] = None
-    admin_validation_checklist: Optional[str] = None
-    status: Literal["draft", "pending_validation", "active", "closed", "rejected"]
-    notes: Optional[str] = None
-    created_at: datetime
+    funding_requirement: Decimal
+    already_secured_funds: Optional[Decimal] = None
+    commitment_gap: Optional[Decimal] = None
+    currency: Optional[str] = None
+    fundraising_start_date: Optional[datetime] = None
+    fundraising_end_date: Optional[datetime] = None
+    municipality_credit_rating: Optional[str] = None
+    municipality_credit_score: Optional[Decimal] = None
+    status: Optional[str] = None
+    visibility: Optional[str] = None
+    funding_raised: Optional[Decimal] = None
+    funding_percentage: Optional[Decimal] = None
+    approved_at: Optional[datetime] = None
+    approved_by: Optional[str] = None
+    admin_notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+    created_by: Optional[str] = None
     updated_at: Optional[datetime] = None
-
+    updated_by: Optional[str] = None
+    
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProjectListResponse(BaseModel):
+    status: str
+    message: str
+    data: list[ProjectResponse]
+    total: int
+    
+    model_config = ConfigDict(from_attributes=True)
+

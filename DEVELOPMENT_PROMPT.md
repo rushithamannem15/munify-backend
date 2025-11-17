@@ -27,10 +27,9 @@ app/
 - **FastAPI** - Web framework
 - **SQLAlchemy 2.0** - ORM
 - **Pydantic 2.5** - Data validation
-- **PyMySQL** - MySQL database driver
+- **psycopg** - PostgreSQL database driver
 - **Alembic** - Database migrations
 - **httpx** - HTTP client for external APIs
-- **passlib** - Password hashing
 
 ## Core Principles
 
@@ -173,9 +172,23 @@ api_router.include_router(your_module.router, prefix="/your-route", tags=["your-
 
 ## Database Patterns
 
+### PostgreSQL-Specific Considerations
+- **Database**: PostgreSQL (not MySQL)
+- **Driver**: `psycopg` (async-capable PostgreSQL adapter)
+- **Connection String**: `postgresql+psycopg://user:password@host:port/dbname`
+- **String Types**: 
+  - Use `String(255)` or `VARCHAR(n)` for fixed-length strings (PostgreSQL supports up to 10MB, but use reasonable lengths)
+  - Use `Text` for unlimited-length strings (no need for `LONGTEXT` like MySQL)
+- **Numeric Types**: Use `Numeric(precision, scale)` for precise decimal arithmetic (recommended for financial data)
+- **Auto-increment**: Use `Integer` with `primary_key=True` (SQLAlchemy handles sequence generation) or `BIGSERIAL` in raw SQL
+- **JSON Support**: PostgreSQL has excellent JSON/JSONB support - use `JSON` or `JSONB` types for flexible schemas
+- **Array Support**: PostgreSQL supports native arrays - use `ARRAY` type when appropriate
+- **Full-Text Search**: PostgreSQL has built-in full-text search capabilities (tsvector, tsquery)
+
 ### Model Definition
 ```python
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Numeric
+from sqlalchemy.dialects.postgresql import JSONB  # PostgreSQL-specific JSONB type
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -188,11 +201,11 @@ class YourModel(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     
     # String fields
-    name = Column(String(191), nullable=False)
-    description = Column(Text, nullable=False)
+    name = Column(String(255), nullable=False)  # PostgreSQL: VARCHAR can be up to 10MB, but use reasonable lengths
+    description = Column(Text, nullable=False)  # PostgreSQL: TEXT for unlimited length
     
-    # Numeric fields
-    amount = Column(Numeric(18, 2), nullable=False)
+    # Numeric fields (PostgreSQL: NUMERIC for precise decimal arithmetic)
+    amount = Column(Numeric(18, 2), nullable=False)  # precision=18, scale=2 (e.g., 9999999999999999.99)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -200,7 +213,11 @@ class YourModel(Base):
     
     # Relationships
     user = relationship("User", back_populates="your_items")
+    
+    # PostgreSQL-specific: JSONB for flexible metadata
+    # metadata = Column(JSONB, nullable=True)  # Use JSONB for queryable JSON data
 ```
+
 
 ### Relationships
 - Define bidirectional relationships with `back_populates`
@@ -247,7 +264,7 @@ def _validate_authorization(self, user_id: int, required_role: str):
 ```
 
 ### Financial Calculations
-Handle financial operations carefully with Decimal type:
+Handle financial operations carefully with Decimal type (PostgreSQL NUMERIC maps to Python Decimal):
 
 ```python
 from decimal import Decimal
@@ -256,10 +273,12 @@ def _calculate_funding_gap(self, funding_required: Decimal, funds_secured: Decim
     """Calculate funding gap"""
     return funding_required - funds_secured
 
-# Use Decimal consistently
+# Use Decimal consistently (PostgreSQL NUMERIC type ensures precision)
 amount = Decimal('100.00')
 funding_gap = self._calculate_funding_gap(required_amount, secured_amount)
 ```
+
+**PostgreSQL Note**: The `Numeric` type in SQLAlchemy maps to PostgreSQL's `NUMERIC` type, which provides exact decimal arithmetic. This is crucial for financial calculations to avoid floating-point rounding errors.
 
 ## Transaction Management
 
@@ -482,8 +501,8 @@ class Item(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    name = Column(String(191), nullable=False)
-    amount = Column(Numeric(18, 2), nullable=False)
+    name = Column(String(255), nullable=False)  # PostgreSQL: Use VARCHAR with reasonable length
+    amount = Column(Numeric(18, 2), nullable=False)  # PostgreSQL: NUMERIC for precise decimal arithmetic
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
