@@ -51,7 +51,7 @@ class Project(Base):
     
     # Source & Audit
     approved_at = Column(TIMESTAMP(timezone=True), nullable=True)
-    approved_by = Column(String(255), nullable=False)
+    approved_by = Column(String(255), nullable=True)
     admin_notes = Column(Text, nullable=True)
     
     # Timestamps

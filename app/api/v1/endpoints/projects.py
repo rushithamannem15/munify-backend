@@ -13,10 +13,12 @@ def create_project(project_data: ProjectCreate, db: Session = Depends(get_db)):
     try:
         service = ProjectService(db)
         project = service.create_project(project_data)
+        # Convert SQLAlchemy model to Pydantic schema
+        project_response = ProjectResponse.model_validate(project)
         return {
             "status": "success",
             "message": "Project created successfully",
-            "data": project
+            "data": project_response
         }
     except HTTPException:
         raise
@@ -33,10 +35,12 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
     try:
         service = ProjectService(db)
         project = service.get_project_by_id(project_id)
+        # Convert SQLAlchemy model to Pydantic schema
+        project_response = ProjectResponse.model_validate(project)
         return {
             "status": "success",
             "message": "Project fetched successfully",
-            "data": project
+            "data": project_response
         }
     except HTTPException:
         raise
@@ -53,10 +57,12 @@ def get_project_by_reference(project_reference_id: str, db: Session = Depends(ge
     try:
         service = ProjectService(db)
         project = service.get_project_by_reference_id(project_reference_id)
+        # Convert SQLAlchemy model to Pydantic schema
+        project_response = ProjectResponse.model_validate(project)
         return {
             "status": "success",
             "message": "Project fetched successfully",
-            "data": project
+            "data": project_response
         }
     except HTTPException:
         raise
@@ -88,10 +94,12 @@ def get_projects(
             status=status,
             visibility=visibility
         )
+        # Convert SQLAlchemy models to Pydantic schemas
+        projects_response = [ProjectResponse.model_validate(project) for project in projects]
         return {
             "status": "success",
             "message": "Projects fetched successfully",
-            "data": projects,
+            "data": projects_response,
             "total": total
         }
     except Exception as e:
@@ -107,10 +115,12 @@ def update_project(project_id: int, project_data: ProjectUpdate, db: Session = D
     try:
         service = ProjectService(db)
         project = service.update_project(project_id, project_data)
+        # Convert SQLAlchemy model to Pydantic schema
+        project_response = ProjectResponse.model_validate(project)
         return {
             "status": "success",
             "message": "Project updated successfully",
-            "data": project
+            "data": project_response
         }
     except HTTPException:
         raise

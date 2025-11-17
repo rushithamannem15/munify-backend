@@ -25,7 +25,7 @@ class ProjectCreate(BaseModel):
     municipality_credit_score: Optional[Decimal] = Field(None, description="Municipality credit score")
     status: Optional[str] = Field('draft', description="Project status")
     visibility: Optional[str] = Field('private', description="Project visibility: private or public")
-    approved_by: str = Field(..., max_length=255, description="User who approved the project")
+    approved_by: Optional[str] = Field(None, max_length=255, description="User who approved the project")
     admin_notes: Optional[str] = Field(None, description="Administrative notes")
     created_by: Optional[str] = Field(None, max_length=255, description="User who created the project")
     
@@ -88,7 +88,7 @@ class ProjectResponse(BaseModel):
     funding_raised: Optional[Decimal] = None
     funding_percentage: Optional[Decimal] = None
     approved_at: Optional[datetime] = None
-    approved_by: str
+    approved_by: Optional[str] = None
     admin_notes: Optional[str] = None
     created_at: Optional[datetime] = None
     created_by: Optional[str] = None
