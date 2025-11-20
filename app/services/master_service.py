@@ -1,6 +1,27 @@
 import httpx
+from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from app.core.config import settings
+from app.models.project_category_master import ProjectCategoryMaster
+from app.models.project_stage_master import ProjectStageMaster
+from app.schemas.master import ProjectCategoryMasterResponse, ProjectStageMasterResponse
+
+
+class MasterService:
+    def __init__(self, db: Session):
+        self.db = db
+    
+    def get_all_project_categories(self):
+        """Get all project categories from master table"""
+        categories = self.db.query(ProjectCategoryMaster).order_by(ProjectCategoryMaster.id).all()
+        # Convert SQLAlchemy models to Pydantic schemas
+        return [ProjectCategoryMasterResponse.model_validate(category) for category in categories]
+    
+    def get_all_project_stages(self):
+        """Get all project stages from master table"""
+        stages = self.db.query(ProjectStageMaster).order_by(ProjectStageMaster.id).all()
+        # Convert SQLAlchemy models to Pydantic schemas
+        return [ProjectStageMasterResponse.model_validate(stage) for stage in stages]
 
 
 def fetch_roles_from_perdix() -> tuple:
