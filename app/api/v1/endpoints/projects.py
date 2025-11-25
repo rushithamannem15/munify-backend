@@ -1,7 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse
+from app.schemas.project import (
+    ProjectCreate, 
+    ProjectUpdate, 
+    ProjectResponse, 
+    ProjectListResponse,
+    ProjectApproveRequest,
+    ProjectRejectRequest,
+    ProjectResubmitRequest
+)
 from app.services.project_service import ProjectService
 
 router = APIRouter()
@@ -79,11 +87,11 @@ def get_projects(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     organization_id: str = Query(None, description="Filter by organization ID"),
     organization_type: str = Query(None, description="Filter by organization type"),
-    status: str = Query(None, description="Filter by project status"),
-    visibility: str = Query(None, description="Filter by project visibility"),
+    status: str = Query(None, description="Filter by project status (draft, pending_validation, active, funding_completed, closed, rejected)"),
+    visibility: str = Query(None, description="Filter by project visibility (private, public)"),
     db: Session = Depends(get_db)
 ):
-    """Get list of projects with optional filters and pagination"""
+    """Get list of projects with optional filters and pagination. Projects are returned ordered by most recent first (created_at desc)."""
     try:
         service = ProjectService(db)
         projects, total = service.get_projects(
@@ -102,6 +110,8 @@ def get_projects(
             "data": projects_response,
             "total": total
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -147,5 +157,92 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete project: {str(e)}"
+        )
+
+
+@router.post("/{project_id}/approve", response_model=dict, status_code=status.HTTP_200_OK)
+def approve_project(
+    project_id: int, 
+    approve_data: ProjectApproveRequest, 
+    db: Session = Depends(get_db)
+):
+    """Approve a project - sets status to 'active'"""
+    try:
+        service = ProjectService(db)
+        project = service.approve_project(
+            project_id, 
+            approve_data.approved_by,
+            approve_data.admin_notes
+        )
+        project_response = ProjectResponse.model_validate(project)
+        return {
+            "status": "success",
+            "message": "Project approved successfully. Status set to 'active'",
+            "data": project_response
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to approve project: {str(e)}"
+        )
+
+
+@router.post("/{project_id}/reject", response_model=dict, status_code=status.HTTP_200_OK)
+def reject_project(
+    project_id: int, 
+    reject_data: ProjectRejectRequest, 
+    db: Session = Depends(get_db)
+):
+    """Reject a project - sets status to 'rejected' and stores reject note"""
+    try:
+        service = ProjectService(db)
+        project = service.reject_project(
+            project_id, 
+            reject_data.reject_note, 
+            reject_data.approved_by
+        )
+        project_response = ProjectResponse.model_validate(project)
+        return {
+            "status": "success",
+            "message": "Project rejected successfully. Status set to 'rejected'",
+            "data": project_response
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reject project: {str(e)}"
+        )
+
+
+@router.post("/{project_id}/resubmit", response_model=dict, status_code=status.HTTP_200_OK)
+def resubmit_project(
+    project_id: int,
+    resubmit_data: ProjectResubmitRequest,
+    db: Session = Depends(get_db)
+):
+    """Resubmit a rejected project - updates project fields and changes status from 'rejected' to 'pending_validation'"""
+    try:
+        service = ProjectService(db)
+        project = service.resubmit_project(
+            project_id,
+            resubmit_data,
+            resubmit_data.updated_by
+        )
+        project_response = ProjectResponse.model_validate(project)
+        return {
+            "status": "success",
+            "message": "Project resubmitted successfully. Status changed to 'pending_validation'",
+            "data": project_response
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to resubmit project: {str(e)}"
         )
 

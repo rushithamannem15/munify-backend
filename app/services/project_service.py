@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from decimal import Decimal
 from datetime import datetime
 from app.models.project import Project
+from app.models.project_rejection_history import ProjectRejectionHistory
 from app.schemas.project import ProjectCreate, ProjectUpdate
 from app.core.logging import get_logger
 
@@ -148,24 +149,32 @@ class ProjectService:
         status: str = None,
         visibility: str = None
     ) -> Tuple[list[Project], int]:
-        """Get list of projects with optional filters"""
+        """Get list of projects with optional filters, ordered by most recent first"""
         query = self.db.query(Project)
         
-        # Apply filters
+        # Validate status if provided
+        if status:
+            self._validate_status(status)
+            query = query.filter(Project.status == status)
+        
+        # Apply other filters
         if organization_id:
             query = query.filter(Project.organization_id == organization_id)
         if organization_type:
             query = query.filter(Project.organization_type == organization_type)
-        if status:
-            query = query.filter(Project.status == status)
         if visibility:
             query = query.filter(Project.visibility == visibility)
         
-        # Get total count
+        # Get total count before pagination
         total = query.count()
         
-        # Apply pagination
-        projects = query.order_by(Project.created_at.desc()).offset(skip).limit(limit).all()
+        # Apply ordering: most recent first (created_at DESC), then by id DESC for consistent ordering
+        projects = query.order_by(
+            Project.created_at.desc(),
+            Project.id.desc()
+        ).offset(skip).limit(limit).all()
+        
+        logger.info(f"Retrieved {len(projects)} projects (total: {total}) with filters: status={status}, organization_id={organization_id}, organization_type={organization_type}, visibility={visibility}")
         
         return projects, total
     
@@ -235,5 +244,210 @@ class ProjectService:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to delete project: {str(e)}"
+            )
+    
+    def approve_project(self, project_id: int, approved_by: str, admin_notes: str = None) -> Project:
+        """Approve a project - sets status to 'active'. Can approve projects in 'pending_validation' status (including resubmitted ones)."""
+        logger.info(f"Approving project {project_id} by {approved_by}")
+        
+        try:
+            project = self.get_project_by_id(project_id)
+            
+            # Check if project is already approved/active
+            if project.status == 'active':
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Project is already approved and active"
+                )
+            
+            # Check if project is in a valid state for approval
+            if project.status not in ['pending_validation']:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Cannot approve a project with status '{project.status}'. Project must be in 'pending_validation' status."
+                )
+            
+            # Update project status and approval fields
+            project.status = 'active'
+            project.approved_at = datetime.now()
+            project.approved_by = approved_by
+            if admin_notes:
+                project.admin_notes = admin_notes
+            
+            self.db.commit()
+            self.db.refresh(project)
+            
+            logger.info(f"Project {project_id} approved successfully by {approved_by}. Status set to 'active'")
+            return project
+            
+        except HTTPException:
+            self.db.rollback()
+            raise
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error approving project {project_id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to approve project: {str(e)}"
+            )
+    
+    def reject_project(self, project_id: int, reject_note: str, approved_by: str) -> Project:
+        """Reject a project - sets status to 'rejected' and stores reject note"""
+        logger.info(f"Rejecting project {project_id} by {approved_by}")
+        
+        try:
+            project = self.get_project_by_id(project_id)
+            
+            # Check if project is already rejected
+            if project.status == 'rejected':
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Project is already rejected"
+                )
+            
+            # Check if project is already active
+            if project.status == 'active':
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Cannot reject an active project"
+                )
+            
+            # Validate reject note is not empty
+            if not reject_note or not reject_note.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Reject note is mandatory and cannot be empty"
+                )
+            
+            # Update project status and reject note
+            project.status = 'rejected'
+            project.admin_notes = reject_note.strip()
+            project.approved_by = approved_by
+            
+            # Create rejection history record
+            rejection = ProjectRejectionHistory(
+                project_id=project_id,
+                rejected_by=approved_by,
+                rejection_note=reject_note.strip(),
+                resubmission_count=0
+            )
+            self.db.add(rejection)
+            
+            self.db.commit()
+            self.db.refresh(project)
+            
+            logger.info(f"Project {project_id} rejected successfully by {approved_by}. Status set to 'rejected' and rejection history created")
+            return project
+            
+        except HTTPException:
+            self.db.rollback()
+            raise
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error rejecting project {project_id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to reject project: {str(e)}"
+            )
+    
+    def resubmit_project(self, project_id: int, project_data, updated_by: str = None) -> Project:
+        """Resubmit a rejected project - updates project fields and changes status from 'rejected' to 'pending_validation'"""
+        logger.info(f"Resubmitting project {project_id} by {updated_by}")
+        
+        try:
+            project = self.get_project_by_id(project_id)
+            
+            # Validate project is in rejected status
+            if project.status != 'rejected':
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Cannot resubmit project with status '{project.status}'. Project must be in 'rejected' status."
+                )
+            
+            # Get the latest rejection record for this project
+            latest_rejection = self.db.query(ProjectRejectionHistory).filter(
+                ProjectRejectionHistory.project_id == project_id
+            ).order_by(ProjectRejectionHistory.rejected_at.desc()).first()
+            
+            if not latest_rejection:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Rejection history not found for this project"
+                )
+            
+            # Extract resubmission_notes before processing update_dict (it's not a project field)
+            resubmission_notes = getattr(project_data, 'resubmission_notes', None)
+            
+            # Validate and update project fields
+            update_dict = project_data.model_dump(exclude_unset=True, exclude={'resubmission_notes'})
+            
+            # Remove fields that shouldn't be updated via resubmission
+            if 'currency' in update_dict:
+                logger.warning(f"Attempted to update currency for project {project_id}. Currency is backend-controlled and will be ignored.")
+                del update_dict['currency']
+            if 'status' in update_dict:
+                logger.warning(f"Attempted to set status in resubmission for project {project_id}. Status will be set to 'pending_validation' automatically.")
+                del update_dict['status']
+            if 'project_reference_id' in update_dict:
+                logger.warning(f"Attempted to update project_reference_id for project {project_id}. This field is immutable.")
+                del update_dict['project_reference_id']
+            
+            # Validate stage and visibility if provided
+            if 'project_stage' in update_dict:
+                self._validate_project_stage(update_dict['project_stage'])
+            if 'visibility' in update_dict:
+                self._validate_visibility(update_dict['visibility'])
+            
+            # Preserve original rejection note in admin_notes
+            original_rejection_note = project.admin_notes or ""
+            
+            # Update project fields
+            for field, value in update_dict.items():
+                setattr(project, field, value)
+            
+            # Change status to pending_validation
+            project.status = 'pending_validation'
+            
+            # Reset approval fields (since it's being resubmitted)
+            project.approved_at = None
+            # Keep approved_by for audit trail (shows who rejected it)
+            
+            # Update admin_notes with resubmission info
+            resubmission_info = []
+            if resubmission_notes:
+                resubmission_info.append(f"[RESUBMITTED on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} by {updated_by}]: {resubmission_notes}")
+            else:
+                resubmission_info.append(f"[RESUBMITTED on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} by {updated_by}]")
+            
+            # Preserve original rejection note and append resubmission info
+            if original_rejection_note:
+                project.admin_notes = f"{original_rejection_note}\n\n" + "\n".join(resubmission_info)
+            else:
+                project.admin_notes = "\n".join(resubmission_info)
+            
+            # Update updated_by and updated_at
+            if updated_by:
+                project.updated_by = updated_by
+            project.updated_at = datetime.now()
+            
+            # Update rejection history record
+            latest_rejection.resubmitted_at = datetime.now()
+            latest_rejection.resubmission_count += 1
+            
+            self.db.commit()
+            self.db.refresh(project)
+            
+            logger.info(f"Project {project_id} resubmitted successfully by {updated_by}. Status changed from 'rejected' to 'pending_validation'")
+            return project
+            
+        except HTTPException:
+            self.db.rollback()
+            raise
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error resubmitting project {project_id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to resubmit project: {str(e)}"
             )
 

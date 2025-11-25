@@ -1,6 +1,7 @@
 from sqlalchemy import Column, BigInteger, String, DateTime, Date, Text, Numeric, CheckConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import TIMESTAMP
+from sqlalchemy.orm import relationship
 from app.core.database import Base
 
 
@@ -67,6 +68,9 @@ class Project(Base):
     created_by = Column(String(255), nullable=True)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=True)
     updated_by = Column(String(255), nullable=True)
+    
+    # Relationships
+    rejection_history = relationship("ProjectRejectionHistory", back_populates="project", cascade="all, delete-orphan")
     
     # Add check constraints
     __table_args__ = (
