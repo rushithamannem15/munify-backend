@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from decimal import Decimal
 from datetime import datetime
 from app.models.project import Project
+from app.models.project_favorite import ProjectFavorite
 from app.models.project_rejection_history import ProjectRejectionHistory
 from app.schemas.project import ProjectCreate, ProjectUpdate
 from app.core.logging import get_logger
@@ -147,7 +148,8 @@ class ProjectService:
         organization_id: str = None,
         organization_type: str = None,
         status: str = None,
-        visibility: str = None
+        visibility: str = None,
+        user_id: str = None,
     ) -> Tuple[list[Project], int]:
         """Get list of projects with optional filters, ordered by most recent first"""
         query = self.db.query(Project)
@@ -173,6 +175,49 @@ class ProjectService:
             Project.created_at.desc(),
             Project.id.desc()
         ).offset(skip).limit(limit).all()
+
+        # Optimize: Calculate favorite counts and user favorites in minimal queries
+        if projects:
+            project_ref_ids = [project.project_reference_id for project in projects]
+            
+            if project_ref_ids:
+                # Single query to get favorite counts for all projects
+                favorite_counts = self.db.query(
+                    ProjectFavorite.project_reference_id,
+                    func.count(ProjectFavorite.project_reference_id).label('count')
+                ).filter(
+                    ProjectFavorite.project_reference_id.in_(project_ref_ids)
+                ).group_by(ProjectFavorite.project_reference_id).all()
+                
+                # Create dictionary for O(1) lookup
+                favorite_count_dict = {ref_id: count for ref_id, count in favorite_counts}
+                
+                # Get user's favorites in a single query (only if user_id provided)
+                favorite_ref_set = set()
+                if user_id:
+                    user_favorites = self.db.query(ProjectFavorite.project_reference_id).filter(
+                        ProjectFavorite.user_id == user_id,
+                        ProjectFavorite.project_reference_id.in_(project_ref_ids)
+                    ).all()
+                    favorite_ref_set = {fav[0] for fav in user_favorites}
+                
+                # Annotate all projects in a single loop
+                for project in projects:
+                    # Always set favorite_count (default to 0 if no favorites)
+                    setattr(project, "favorite_count", favorite_count_dict.get(project.project_reference_id, 0))
+                    
+                    # Set is_favorite only if user_id was provided
+                    if user_id:
+                        setattr(project, "is_favorite", project.project_reference_id in favorite_ref_set)
+            else:
+                # Edge case: projects exist but no ref_ids (shouldn't happen, but handle gracefully)
+                for project in projects:
+                    setattr(project, "favorite_count", 0)
+                    if user_id:
+                        setattr(project, "is_favorite", False)
+        else:
+            # No projects to annotate
+            pass
         
         logger.info(f"Retrieved {len(projects)} projects (total: {total}) with filters: status={status}, organization_id={organization_id}, organization_type={organization_type}, visibility={visibility}")
         
@@ -328,8 +373,7 @@ class ProjectService:
             rejection = ProjectRejectionHistory(
                 project_id=project_id,
                 rejected_by=approved_by,
-                rejection_note=reject_note.strip(),
-                resubmission_count=0
+                rejection_note=reject_note.strip()
             )
             self.db.add(rejection)
             
@@ -432,7 +476,6 @@ class ProjectService:
             
             # Update rejection history record
             latest_rejection.resubmitted_at = datetime.now()
-            latest_rejection.resubmission_count += 1
             
             self.db.commit()
             self.db.refresh(project)

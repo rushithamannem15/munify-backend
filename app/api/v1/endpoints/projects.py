@@ -88,7 +88,7 @@ def get_projects(
     organization_id: str = Query(None, description="Filter by organization ID"),
     organization_type: str = Query(None, description="Filter by organization type"),
     status: str = Query(None, description="Filter by project status (draft, pending_validation, active, funding_completed, closed, rejected)"),
-    visibility: str = Query(None, description="Filter by project visibility (private, public)"),
+    user_id: str = Query(None, description="User ID to determine if projects are favorited by this user"),
     db: Session = Depends(get_db)
 ):
     """Get list of projects with optional filters and pagination. Projects are returned ordered by most recent first (created_at desc)."""
@@ -100,7 +100,7 @@ def get_projects(
             organization_id=organization_id,
             organization_type=organization_type,
             status=status,
-            visibility=visibility
+            user_id=user_id
         )
         # Convert SQLAlchemy models to Pydantic schemas
         projects_response = [ProjectResponse.model_validate(project) for project in projects]

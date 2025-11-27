@@ -25,6 +25,7 @@ class ProjectDraftCreate(BaseModel):
     total_project_cost: Optional[Decimal] = Field(None, description="Total project cost")
     funding_requirement: Optional[Decimal] = Field(None, description="Funding requirement amount")
     already_secured_funds: Optional[Decimal] = Field(0, description="Already secured funds")
+    commitment_gap: Optional[Decimal] = Field(None, description="Commitment gap amount")
     currency: Optional[str] = Field('INR', max_length=10, description="Currency code")
     fundraising_start_date: Optional[datetime] = Field(None, description="Fundraising start date")
     fundraising_end_date: Optional[datetime] = Field(None, description="Fundraising end date")
@@ -94,6 +95,7 @@ class ProjectDraftResponse(BaseModel):
     total_project_cost: Optional[Decimal] = None
     funding_requirement: Optional[Decimal] = None
     already_secured_funds: Optional[Decimal] = None
+    commitment_gap: Optional[Decimal] = None
     currency: Optional[str] = None
     fundraising_start_date: Optional[datetime] = None
     fundraising_end_date: Optional[datetime] = None

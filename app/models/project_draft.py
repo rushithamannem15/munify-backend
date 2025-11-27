@@ -38,6 +38,7 @@ class ProjectDraft(Base):
     total_project_cost = Column(Numeric(15, 2), nullable=True)
     funding_requirement = Column(Numeric(15, 2), nullable=True)  # Nullable for drafts
     already_secured_funds = Column(Numeric(15, 2), default=0, nullable=True)
+    commitment_gap = Column(Numeric(15, 2), nullable=True)
     currency = Column(String(10), default='INR', nullable=True)
     
     # Fundraising Timeline

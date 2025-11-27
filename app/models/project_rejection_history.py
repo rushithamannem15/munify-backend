@@ -20,7 +20,6 @@ class ProjectRejectionHistory(Base):
     
     # Resubmission tracking
     resubmitted_at = Column(TIMESTAMP(timezone=True), nullable=True)
-    resubmission_count = Column(Integer, default=0, nullable=False)
     
     # Timestamps
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=True)

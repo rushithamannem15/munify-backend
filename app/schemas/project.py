@@ -24,6 +24,7 @@ class ProjectCreate(BaseModel):
     total_project_cost: Optional[Decimal] = Field(None, description="Total project cost")
     funding_requirement: Decimal = Field(..., description="Funding requirement amount")
     already_secured_funds: Optional[Decimal] = Field(0, description="Already secured funds")
+    commitment_gap: Optional[Decimal] = Field(None, description="Commitment gap amount")
     currency: Optional[str] = Field('INR', max_length=10, description="Currency code")
     fundraising_start_date: Optional[datetime] = Field(None, description="Fundraising start date")
     fundraising_end_date: Optional[datetime] = Field(None, description="Fundraising end date")
@@ -112,6 +113,14 @@ class ProjectResponse(BaseModel):
     created_by: Optional[str] = None
     updated_at: Optional[datetime] = None
     updated_by: Optional[str] = None
+    is_favorite: Optional[bool] = Field(
+        None,
+        description="Indicates whether the project is favorited by the specified user (only set when user_id is provided)"
+    )
+    favorite_count: int = Field(
+        0,
+        description="Total number of users who have favorited this project"
+    )
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -180,7 +189,6 @@ class ProjectRejectionHistoryResponse(BaseModel):
     rejected_by: str
     rejection_note: str
     resubmitted_at: Optional[datetime] = None
-    resubmission_count: int
     created_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
