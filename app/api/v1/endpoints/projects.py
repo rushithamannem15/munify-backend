@@ -2,15 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.schemas.project import (
-    ProjectCreate, 
-    ProjectUpdate, 
-    ProjectResponse, 
+    ProjectCreate,
+    ProjectUpdate,
+    ProjectResponse,
     ProjectListResponse,
     ProjectApproveRequest,
     ProjectRejectRequest,
-    ProjectResubmitRequest
+    ProjectResubmitRequest,
 )
 from app.services.project_service import ProjectService
+from app.schemas.commitment import CommitmentResponse
 
 router = APIRouter()
 
@@ -60,17 +61,39 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/reference/{project_reference_id}", response_model=dict, status_code=status.HTTP_200_OK)
-def get_project_by_reference(project_reference_id: str, db: Session = Depends(get_db)):
-    """Get project by reference ID"""
+def get_project_by_reference(
+    project_reference_id: str,
+    committed_by: str | None = Query(
+        None,
+        description="If provided, returns the existing commitment data for this project and committed_by (if any)",
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    Get project by reference ID.
+
+    If `committed_by` is provided and a matching commitment exists for this
+    project (based on project_reference_id and committed_by), the response
+    will also include full `commitment` data embedded inside the
+    ProjectResponse (under data.commitment), so the caller can directly
+    use it for edit (PUT) flows.
+    """
     try:
         service = ProjectService(db)
-        project = service.get_project_by_reference_id(project_reference_id)
-        # Convert SQLAlchemy model to Pydantic schema
+        project, commitment = service.get_project_with_commitment_by_reference(
+            project_reference_id=project_reference_id,
+            committed_by=committed_by,
+        )
+
+        # Convert SQLAlchemy model to Pydantic schemas
         project_response = ProjectResponse.model_validate(project)
+        if commitment:
+            project_response.commitment = CommitmentResponse.model_validate(commitment)
+
         return {
             "status": "success",
             "message": "Project fetched successfully",
-            "data": project_response
+            "data": project_response,
         }
     except HTTPException:
         raise

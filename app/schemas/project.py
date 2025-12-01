@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from decimal import Decimal
 from datetime import date, datetime
+from app.schemas.commitment import CommitmentResponse
 
 
 class ProjectCreate(BaseModel):
@@ -120,6 +121,10 @@ class ProjectResponse(BaseModel):
     favorite_count: int = Field(
         0,
         description="Total number of users who have favorited this project"
+    )
+    commitment: Optional[CommitmentResponse] = Field(
+        None,
+        description="Commitment details for this project and committed_by (only set when requested in project reference API)",
     )
     
     model_config = ConfigDict(from_attributes=True)

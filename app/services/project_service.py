@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from fastapi import HTTPException, status
@@ -7,6 +7,7 @@ from datetime import datetime
 from app.models.project import Project
 from app.models.project_favorite import ProjectFavorite
 from app.models.project_rejection_history import ProjectRejectionHistory
+from app.models.commitment import Commitment
 from app.schemas.project import ProjectCreate, ProjectUpdate
 from app.core.logging import get_logger
 
@@ -140,6 +141,31 @@ class ProjectService:
                 detail=f"Project with reference ID '{project_reference_id}' not found"
             )
         return project
+
+    def get_project_with_commitment_by_reference(
+        self,
+        project_reference_id: str,
+        committed_by: Optional[str] = None,
+    ) -> tuple[Project, Optional[Commitment]]:
+        """
+        Get project by reference ID and, if committed_by is provided,
+        fetch the latest matching commitment for this project and committed_by.
+        """
+        project = self.get_project_by_reference_id(project_reference_id)
+
+        commitment: Optional[Commitment] = None
+        if committed_by:
+            commitment = (
+                self.db.query(Commitment)
+                .filter(
+                    Commitment.project_id == project_reference_id,
+                    Commitment.committed_by == committed_by,
+                )
+                .order_by(Commitment.created_at.desc())
+                .first()
+            )
+
+        return project, commitment
     
     def get_projects(
         self,

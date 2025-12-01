@@ -385,27 +385,25 @@ CREATE TABLE perdix_mp_project_progress_update_media (
 CREATE TABLE perdix_mp_commitments (
     id BIGSERIAL PRIMARY KEY,
     project_id VARCHAR(255) NOT NULL REFERENCES perdix_mp_projects(project_reference_id) ON DELETE CASCADE,
-    organization_type VARCHAR(255) NOT NULL ,
-    organization_id varchar(255) NOT NULL ,
-    committed_by varchar(255) NOT NULL ,
+    organization_type VARCHAR(255) NOT NULL,
+    organization_id VARCHAR(255) NOT NULL,
+    committed_by VARCHAR(255) NOT NULL,
     
     -- Commitment Details
     amount DECIMAL(15, 2) NOT NULL,
     currency VARCHAR(10) DEFAULT 'INR',
     funding_mode VARCHAR(50) NOT NULL CHECK (funding_mode IN ('loan', 'grant', 'csr')), -- BRD: Loan / Grant / CSR
     interest_rate DECIMAL(5, 2), -- For loans
+    tenure_months INT,
     
     -- Terms & Conditions (BRD: 250 words free-text)
     terms_conditions_text TEXT, -- Free text field for lenders
     
-    
     -- Status & Workflow
-    status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('draft', 'pending', 'under_review', 'approved', 'rejected', 'withdrawn', 'funded', 'completed')),
-    can_modify BOOLEAN DEFAULT TRUE, -- BRD: Can withdraw/modify before funding window closure
-    is_locked BOOLEAN DEFAULT FALSE,
+    status VARCHAR(50) DEFAULT 'under_review' CHECK (status IN ('under_review', 'approved', 'rejected', 'withdrawn', 'funded', 'completed')),
     
     -- Approval
-    approved_by VARCHAR(255) NOT NULL ,
+    approved_by VARCHAR(255), -- Nullable; set when approved/rejected
     approved_at TIMESTAMP WITH TIME ZONE,
     rejection_reason TEXT,
     rejection_notes TEXT,
@@ -428,17 +426,19 @@ CREATE TABLE perdix_mp_commitments (
 -- Commitment History (Track all updates)
 CREATE TABLE perdix_mp_commitment_history (
     id BIGSERIAL PRIMARY KEY,
-    project_id VARCHAR(255) NOT NULL REFERENCES perdix_mp_commitments(project_id) ON DELETE CASCADE,
-    organization_type VARCHAR(255) NOT NULL ,
-    organization_id varchar(255) NOT NULL ,
-    committed_by varchar(255) NOT NULL ,
+    commitment_id BIGINT NOT NULL REFERENCES perdix_mp_commitments(id) ON DELETE CASCADE,
+    project_id VARCHAR(255) NOT NULL REFERENCES perdix_mp_projects(project_reference_id) ON DELETE CASCADE,
+    organization_type VARCHAR(255) NOT NULL,
+    organization_id VARCHAR(255) NOT NULL,
+    committed_by VARCHAR(255) NOT NULL,
     amount DECIMAL(15, 2),
     funding_mode VARCHAR(50),
     interest_rate DECIMAL(5, 2),
+    tenure_months INT,
     terms_conditions_text TEXT,
     status VARCHAR(50),
     
-    action VARCHAR(50), -- created, updated, withdrawn
+    action VARCHAR(50), -- created, updated, withdrawn, approved, rejected, funded, completed
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(255),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
