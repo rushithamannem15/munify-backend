@@ -67,6 +67,40 @@ def get_project_favorites(
 
 
 
+@router.get("/project-details", response_model=dict, status_code=status.HTTP_200_OK)
+def get_favorited_project_details(
+    user_id: str = Query(..., description="User ID to get favorited project details for"),
+    organization_id: str | None = Query(None, description="Filter by organization ID"),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    db: Session = Depends(get_db),
+):
+    """
+    Get detailed project records from perdix_mp_projects for all projects
+    favorited by the given user (and optionally filtered by organization).
+    """
+    try:
+        service = ProjectFavoriteService(db)
+        projects, total = service.get_favorited_project_details(
+            user_id=user_id,
+            organization_id=organization_id,
+            skip=skip,
+            limit=limit,
+        )
+
+        return {
+            "status": "success",
+            "message": "Favorited project details fetched successfully",
+            "data": projects,
+            "total": total,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch favorited project details: {str(e)}",
+        )
 
 @router.delete("/", status_code=status.HTTP_200_OK)
 def delete_project_favorite_by_project_and_user(
