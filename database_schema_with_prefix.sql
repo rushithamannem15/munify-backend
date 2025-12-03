@@ -649,7 +649,7 @@ CREATE TABLE perdix_mp_project_favorites (
 -- Project Notes (BRD: Private to organization, visible to all users within org)
 CREATE TABLE perdix_mp_project_notes (
     id BIGSERIAL PRIMARY KEY,
-    project_id VARCHAR(255) NOT NULL REFERENCES perdix_mp_projects(project_reference_id) ON DELETE CASCADE,
+    project_reference_id VARCHAR(255) NOT NULL REFERENCES perdix_mp_projects(project_reference_id) ON DELETE CASCADE,
     organization_id varchar(255) NOT NULL ,
     
     title VARCHAR(255),

@@ -35,7 +35,7 @@ class ProjectDraftCreate(BaseModel):
     approved_by: Optional[str] = Field(None, max_length=255, description="User who approved the project")
     admin_notes: Optional[str] = Field(None, description="Administrative notes")
     last_saved_tab: Optional[str] = Field(None, description="Last saved tab: tab1, tab2, or tab3")
-    
+    created_by: Optional[str] = Field(None, max_length=255, description="User who created the draft")
     model_config = ConfigDict(from_attributes=True)
 
 

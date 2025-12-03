@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     project_drafts,
     project_favorites,
     commitments,
+    project_notes,
 )
 
 api_router = APIRouter()
@@ -24,3 +25,4 @@ api_router.include_router(project_drafts.router, prefix="/project-drafts", tags=
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(project_favorites.router, prefix="/project-favorites", tags=["project-favorites"])
 api_router.include_router(commitments.router, prefix="/commitments", tags=["commitments"])
+api_router.include_router(project_notes.router, prefix="/project-notes", tags=["project-notes"])
