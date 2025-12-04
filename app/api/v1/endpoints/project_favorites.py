@@ -31,8 +31,6 @@ def create_project_favorite(favorite_data: ProjectFavoriteCreate, db: Session = 
 
 
 
-
-
 @router.get("/", response_model=dict, status_code=status.HTTP_200_OK)
 def get_project_favorites(
     user_id: str = Query(..., description="User ID to get favorites for"),
