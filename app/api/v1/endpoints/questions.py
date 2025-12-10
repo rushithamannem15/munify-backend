@@ -41,7 +41,8 @@ def create_question(question_data: QuestionCreate, db: Session = Depends(get_db)
     "/", response_model=QuestionListResponse, status_code=status.HTTP_200_OK
 )
 def list_questions(
-    project_id: str = Query(..., description="Project reference ID to filter questions"),
+    project_id: str | None = Query(None, description="Project reference ID to filter questions"),
+    organization_id: str | None = Query(None, description="Organization ID to filter questions"),
     status_filter: str
     | None = Query(None, description="Filter by question status"),
     category: str | None = Query(None, description="Filter by category"),
@@ -51,12 +52,23 @@ def list_questions(
     db: Session = Depends(get_db),
 ):
     """
-    List questions for a project with optional filters and pagination.
+    List questions with optional filters and pagination.
+    
+    Can filter by project_id (project_reference_id) and/or organization_id.
+    At least one of project_id or organization_id should be provided.
     """
+    # Validate that at least one filter is provided
+    if not project_id and not organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one of project_id or organization_id must be provided",
+        )
+    
     try:
         service = QuestionService(db)
         questions, total = service.list_questions(
             project_id=project_id,
+            organization_id=organization_id,
             status_filter=status_filter,
             category=category,
             priority=priority,

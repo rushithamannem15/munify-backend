@@ -82,22 +82,42 @@ class QuestionService:
 
     def list_questions(
         self,
-        project_id: str,
+        project_id: Optional[str] = None,
+        organization_id: Optional[str] = None,
         status_filter: Optional[str] = None,
         category: Optional[str] = None,
         priority: Optional[str] = None,
         skip: int = 0,
         limit: int = 50,
     ) -> Tuple[List[Question], int]:
-        """List questions for a project with optional filters and pagination."""
-        self._validate_project_exists(project_id)
+        """List questions with optional filters and pagination.
+        
+        Can filter by project_id (project_reference_id) and/or organization_id.
+        If project_id is provided, validates that the project exists.
+        """
+        # Validate project exists if project_id is provided
+        if project_id:
+            self._validate_project_exists(project_id)
 
-        query = (
-            self.db.query(Question)
-            .options(joinedload(Question.answer))
-            .filter(Question.project_id == project_id)
-        )
+        # Start building query with join to Project if organization_id filter is needed
+        if organization_id:
+            query = (
+                self.db.query(Question)
+                .join(Project, Question.project_id == Project.project_reference_id)
+                .options(joinedload(Question.answer))
+                .filter(Project.organization_id == organization_id)
+            )
+        else:
+            query = (
+                self.db.query(Question)
+                .options(joinedload(Question.answer))
+            )
 
+        # Apply project_id filter if provided
+        if project_id:
+            query = query.filter(Question.project_id == project_id)
+
+        # Apply other filters
         if status_filter:
             query = query.filter(Question.status == status_filter)
         if category:
