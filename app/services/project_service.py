@@ -651,4 +651,71 @@ class ProjectService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to fetch projects commitments summary: {str(e)}"
             )
+    
+    def get_fully_funded_projects(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Tuple[List[Project], int]:
+        """
+        Get list of fully funded projects (status = 'funding_completed') with funding parameters:
+        - Average interest_rate from approved commitments
+        - Number of investors (count of approved commitments)
+        """
+        logger.info("Fetching fully funded projects with funding parameters")
+        
+        try:
+            # Query projects with status 'funding_completed'
+            query = self.db.query(Project).filter(
+                Project.status == 'funding_completed'
+            )
+            
+            # Get total count before pagination
+            total = query.count()
+            
+            # Apply ordering: most recent first
+            projects = query.order_by(
+                Project.created_at.desc(),
+                Project.id.desc()
+            ).offset(skip).limit(limit).all()
+            
+            # For each project, calculate funding parameters from approved commitments
+            for project in projects:
+                # Query approved commitments for this project
+                approved_commitments = (
+                    self.db.query(Commitment)
+                    .filter(
+                        Commitment.project_id == project.project_reference_id,
+                        Commitment.status == 'approved'
+                    )
+                    .all()
+                )
+                
+                # Calculate average interest_rate (only from commitments that have interest_rate)
+                interest_rates = [
+                    c.interest_rate for c in approved_commitments
+                    if c.interest_rate is not None
+                ]
+                
+                if interest_rates:
+                    # Use Decimal arithmetic for precision
+                    total_rate = sum(interest_rates)
+                    avg_interest_rate = total_rate / Decimal(str(len(interest_rates)))
+                    # Round to 2 decimal places
+                    setattr(project, "average_interest_rate", round(avg_interest_rate, 2))
+                else:
+                    setattr(project, "average_interest_rate", None)
+                
+                # Count number of investors (number of approved commitments)
+                setattr(project, "number_of_investors", len(approved_commitments))
+            
+            logger.info(f"Retrieved {len(projects)} fully funded projects (total: {total})")
+            return projects, total
+            
+        except Exception as e:
+            logger.error(f"Error fetching fully funded projects: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to fetch fully funded projects: {str(e)}"
+            )
 

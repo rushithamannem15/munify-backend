@@ -225,3 +225,67 @@ class ProjectCommitmentsSummaryListResponse(BaseModel):
     total: int
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class FullyFundedProjectResponse(BaseModel):
+    """Schema for fully funded project with funding parameters"""
+    # All project fields
+    id: int
+    organization_type: str
+    organization_id: str
+    project_reference_id: str
+    title: str
+    department: Optional[str] = None
+    contact_person: str
+    contact_person_designation: Optional[str] = None
+    contact_person_email: Optional[str] = None
+    contact_person_phone: Optional[str] = None
+    category: Optional[str] = None
+    project_stage: Optional[str] = None
+    description: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    state: Optional[str] = None
+    city: Optional[str] = None
+    ward: Optional[str] = None
+    total_project_cost: Optional[Decimal] = None
+    funding_requirement: Decimal
+    already_secured_funds: Optional[Decimal] = None
+    commitment_gap: Optional[Decimal] = None
+    currency: Optional[str] = None
+    fundraising_start_date: Optional[datetime] = None
+    fundraising_end_date: Optional[datetime] = None
+    municipality_credit_rating: Optional[str] = None
+    municipality_credit_score: Optional[Decimal] = None
+    status: Optional[str] = None
+    visibility: Optional[str] = None
+    funding_raised: Optional[Decimal] = None
+    funding_percentage: Optional[Decimal] = None
+    approved_at: Optional[datetime] = None
+    approved_by: Optional[str] = None
+    admin_notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+    created_by: Optional[str] = None
+    updated_at: Optional[datetime] = None
+    updated_by: Optional[str] = None
+    # Funding parameters from approved commitments
+    average_interest_rate: Optional[Decimal] = Field(
+        None,
+        description="Average interest rate from approved commitments"
+    )
+    number_of_investors: int = Field(
+        0,
+        description="Number of investors (approved commitments count)"
+    )
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FullyFundedProjectListResponse(BaseModel):
+    """Schema for list of fully funded projects"""
+    status: str
+    message: str
+    data: List[FullyFundedProjectResponse]
+    total: int
+    
+    model_config = ConfigDict(from_attributes=True)
