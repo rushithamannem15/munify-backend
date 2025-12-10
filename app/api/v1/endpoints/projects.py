@@ -9,6 +9,8 @@ from app.schemas.project import (
     ProjectApproveRequest,
     ProjectRejectRequest,
     ProjectResubmitRequest,
+    FullyFundedProjectListResponse,
+    FullyFundedProjectResponse,
 )
 from app.services.project_service import ProjectService
 from app.schemas.commitment import CommitmentResponse
@@ -267,5 +269,42 @@ def resubmit_project(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to resubmit project: {str(e)}"
+        )
+
+
+@router.get("/fully-funded", response_model=FullyFundedProjectListResponse, status_code=status.HTTP_200_OK)
+def get_fully_funded_projects(
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get list of fully funded projects (status = 'funding_completed') with funding parameters:
+    - Average interest_rate from approved commitments
+    - Number of investors (count of approved commitments)
+    
+    Only projects with status 'funding_completed' are returned.
+    Funding parameters are calculated from commitments with status 'approved'.
+    """
+    try:
+        service = ProjectService(db)
+        projects, total = service.get_fully_funded_projects(
+            skip=skip,
+            limit=limit
+        )
+        # Convert SQLAlchemy models to Pydantic schemas
+        projects_response = [FullyFundedProjectResponse.model_validate(project) for project in projects]
+        return {
+            "status": "success",
+            "message": "Fully funded projects fetched successfully",
+            "data": projects_response,
+            "total": total
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch fully funded projects: {str(e)}"
         )
 
