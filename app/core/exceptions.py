@@ -11,13 +11,33 @@ logger = get_logger("exceptions")
 
 def http_exception_handler(request: Request, exc: StarletteHTTPException):
     logger.error(f"HTTP Exception: {exc.status_code} - {exc.detail}")
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "status": "error",
-            "message": exc.detail if isinstance(exc.detail, str) else "HTTP error",
-        },
-    )
+    
+    # Handle Perdix error response format (dict with errorId and error)
+    if isinstance(exc.detail, dict):
+        # Return Perdix error response as-is
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "status": "error",
+                **exc.detail  # Spread the Perdix error response (errorId, error, etc.)
+            },
+        )
+    elif isinstance(exc.detail, str):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "status": "error",
+                "message": exc.detail,
+            },
+        )
+    else:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "status": "error",
+                "message": str(exc.detail),
+            },
+        )
 
 
 def request_validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -39,7 +59,7 @@ def unhandled_exception_handler(request: Request, exc: Exception):
         content={
             "status": "error",
             "message": "Internal server error",
-            "errors": str(exc),
+            "errors": str(exc.detail.error),
         },
     )
 

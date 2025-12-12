@@ -12,6 +12,7 @@ from app.api.v1.endpoints import (
     commitments,
     questions,
     project_notes,
+    perdix,
 )
 
 api_router = APIRouter()
@@ -28,3 +29,4 @@ api_router.include_router(project_favorites.router, prefix="/project-favorites",
 api_router.include_router(commitments.router, prefix="/commitments", tags=["commitments"])
 api_router.include_router(questions.router, prefix="/questions", tags=["questions"])
 api_router.include_router(project_notes.router, prefix="/project-notes", tags=["project-notes"])
+api_router.include_router(perdix.router, prefix="/perdix", tags=["perdix"])

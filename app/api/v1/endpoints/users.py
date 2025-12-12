@@ -12,6 +12,8 @@ from app.services.user_service import (
     get_account_from_perdix,
     get_branch_from_perdix,
 )
+from app.services.user_registration_service import UserRegistrationService
+from app.schemas.user_registration import UserRegistrationCreate, UserRegistrationResponse
 from fastapi.responses import JSONResponse
 
 router = APIRouter()
@@ -170,3 +172,47 @@ def get_account(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch account details: {str(exc)}"
         )
+
+
+@router.post("/register", response_model=dict, status_code=status.HTTP_201_CREATED)
+def register_user(
+    registration_data: UserRegistrationCreate,
+    db: Session = Depends(get_db),
+    created_by: Optional[str] = Header(None, alias="X-Created-By")
+):
+    """
+    Register a new user:
+    1. Accepts flexible payload based on organization type
+    2. Extracts common fields required for Perdix API
+    3. Calls Perdix API to create user
+    4. Stores user details in local database
+    
+    The payload can vary based on organization type, but must include:
+    - Common fields: organization_name, organization_type, user_name, user_email, 
+      user_mobile_number, password, confirm_password, user_role
+    - Perdix-specific fields: login, valid_until, branch_id, branch_name, user_branches
+    """
+    service = UserRegistrationService(db)
+    user = service.register_user(registration_data, created_by=created_by)
+    
+    return {
+        "status": "success",
+        "message": "User registered successfully",
+        "data": user.model_dump()
+    }
+
+
+@router.get("/register/{user_id}", response_model=dict, status_code=status.HTTP_200_OK)
+def get_registered_user(
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get registered user details by user_id"""
+    service = UserRegistrationService(db)
+    user = service.get_user_by_id(user_id)
+    
+    return {
+        "status": "success",
+        "message": "User fetched successfully",
+        "data": user.model_dump()
+    }

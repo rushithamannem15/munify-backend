@@ -13,10 +13,20 @@ def create_user_in_perdix(payload: dict) -> tuple:
 
     headers = {
         "accept": "application/json, text/plain, */*",
-        "content-type": "application/json;charset=UTF-8",
+        "accept-language": "en-US,en;q=0.9,hi;q=0.8",
         "authorization": f"JWT {settings.PERDIX_JWT}",
+        "content-type": "application/json;charset=UTF-8",
         "origin": settings.PERDIX_ORIGIN,
         "page_uri": settings.PERDIX_PAGE_URI,
+        "priority": "u=1, i",
+        "referer": f"{settings.PERDIX_ORIGIN}/perdix-client/",
+        "sec-ch-ua": '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
     }
 
     try:
