@@ -40,6 +40,88 @@ def create_project(project_data: ProjectCreate, db: Session = Depends(get_db)):
         )
 
 
+@router.get("/fully-funded", response_model=FullyFundedProjectListResponse, status_code=status.HTTP_200_OK)
+def get_fully_funded_projects(
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get list of fully funded projects (status = 'funding_completed') with funding parameters:
+    - Average interest_rate from approved commitments
+    - Number of investors (count of approved commitments)
+    
+    Only projects with status 'funding_completed' are returned.
+    Funding parameters are calculated from commitments with status 'approved'.
+    """
+    try:
+        service = ProjectService(db)
+        projects, total = service.get_fully_funded_projects(
+            skip=skip,
+            limit=limit
+        )
+        # Convert SQLAlchemy models to Pydantic schemas
+        projects_response = [FullyFundedProjectResponse.model_validate(project) for project in projects]
+        return {
+            "status": "success",
+            "message": "Fully funded projects fetched successfully",
+            "data": projects_response,
+            "total": total
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch fully funded projects: {str(e)}"
+        )
+
+
+@router.get("/funded-by-user", response_model=ProjectListResponse, status_code=status.HTTP_200_OK)
+def get_projects_funded_by_user(
+    committed_by: str = Query(..., description="User ID who has made commitments to projects"),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all projects that have been funded by a specific user.
+    
+    This endpoint returns all projects where the user (committed_by) has made
+    at least one commitment. Projects are fetched using project_reference_id from
+    the projects table, joined with commitments table where committed_by matches
+    the provided user ID.
+    
+    For each project, the response includes the latest commitment details (including
+    commitment status) made by the user, attached under the 'commitment' field.
+    
+    Projects are returned ordered by most recent first (created_at desc).
+    """
+    try:
+        service = ProjectService(db)
+        projects, total = service.get_projects_funded_by_user(
+            committed_by=committed_by,
+            skip=skip,
+            limit=limit
+        )
+        # Convert SQLAlchemy models to Pydantic schemas
+        # ProjectResponse schema already supports commitment field
+        projects_response = [ProjectResponse.model_validate(project) for project in projects]
+        return {
+            "status": "success",
+            "message": f"Projects funded by user {committed_by} fetched successfully",
+            "data": projects_response,
+            "total": total
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch projects funded by user: {str(e)}"
+        )
+
+
 @router.get("/{project_id}", response_model=dict, status_code=status.HTTP_200_OK)
 def get_project(project_id: int, db: Session = Depends(get_db)):
     """Get project by ID"""
@@ -269,42 +351,5 @@ def resubmit_project(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to resubmit project: {str(e)}"
-        )
-
-
-@router.get("/fully-funded", response_model=FullyFundedProjectListResponse, status_code=status.HTTP_200_OK)
-def get_fully_funded_projects(
-    skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-    db: Session = Depends(get_db)
-):
-    """
-    Get list of fully funded projects (status = 'funding_completed') with funding parameters:
-    - Average interest_rate from approved commitments
-    - Number of investors (count of approved commitments)
-    
-    Only projects with status 'funding_completed' are returned.
-    Funding parameters are calculated from commitments with status 'approved'.
-    """
-    try:
-        service = ProjectService(db)
-        projects, total = service.get_fully_funded_projects(
-            skip=skip,
-            limit=limit
-        )
-        # Convert SQLAlchemy models to Pydantic schemas
-        projects_response = [FullyFundedProjectResponse.model_validate(project) for project in projects]
-        return {
-            "status": "success",
-            "message": "Fully funded projects fetched successfully",
-            "data": projects_response,
-            "total": total
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch fully funded projects: {str(e)}"
         )
 

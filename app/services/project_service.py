@@ -718,4 +718,100 @@ class ProjectService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to fetch fully funded projects: {str(e)}"
             )
+    
+    def get_projects_funded_by_user(
+        self,
+        committed_by: str,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Tuple[List[Project], int]:
+        """
+        Get all projects that have been funded by a specific user.
+        
+        This method joins the projects and commitments tables to find all projects
+        where the user (committed_by) has made at least one commitment.
+        For each project, it also fetches the latest commitment made by the user
+        and attaches it to the project object so the commitment status can be included.
+        
+        Args:
+            committed_by: User ID who has made commitments
+            skip: Number of records to skip for pagination
+            limit: Maximum number of records to return
+            
+        Returns:
+            Tuple of (list of projects with commitment data attached, total count)
+        """
+        logger.info(
+            "Fetching projects funded by user %s, skip=%s, limit=%s",
+            committed_by,
+            skip,
+            limit,
+        )
+        
+        try:
+            # Query to get distinct projects where user has made commitments
+            # Join projects with commitments on project_reference_id
+            query = (
+                self.db.query(Project)
+                .join(
+                    Commitment,
+                    Project.project_reference_id == Commitment.project_id
+                )
+                .filter(Commitment.committed_by == committed_by)
+                .distinct()
+            )
+            
+            # Get total count before pagination
+            total = query.count()
+            
+            # Apply ordering: most recent first
+            projects = (
+                query.order_by(
+                    Project.created_at.desc(),
+                    Project.id.desc()
+                )
+                .offset(skip)
+                .limit(limit)
+                .all()
+            )
+            
+            # For each project, fetch the latest commitment made by this user
+            # and attach it to the project object for serialization
+            for project in projects:
+                latest_commitment = (
+                    self.db.query(Commitment)
+                    .filter(
+                        Commitment.project_id == project.project_reference_id,
+                        Commitment.committed_by == committed_by,
+                    )
+                    .order_by(Commitment.created_at.desc())
+                    .first()
+                )
+                
+                # Attach commitment to project object
+                # This will be serialized by ProjectResponse schema which has a commitment field
+                if latest_commitment:
+                    setattr(project, "commitment", latest_commitment)
+                else:
+                    setattr(project, "commitment", None)
+            
+            logger.info(
+                "Retrieved %s projects funded by user %s (total: %s)",
+                len(projects),
+                committed_by,
+                total,
+            )
+            
+            return projects, total
+            
+        except Exception as e:
+            logger.error(
+                "Error fetching projects funded by user %s: %s",
+                committed_by,
+                str(e),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to fetch projects funded by user: {str(e)}"
+            )
 
