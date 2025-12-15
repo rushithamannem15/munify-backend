@@ -18,7 +18,7 @@ class ProjectDraftService:
     
     def _calculate_completion_percentage(self, draft: ProjectDraft) -> Decimal:
         """Calculate completion percentage based on filled fields"""
-        total_fields = 24  # Total number of main fields (updated to include 3 contact + 3 location fields)
+        total_fields = 33  # Total number of main fields (24 original + 9 new fields)
         filled_fields = 0
         
         # Count filled fields
@@ -46,6 +46,17 @@ class ProjectDraftService:
             filled_fields += 1
         if draft.end_date:
             filled_fields += 1
+        # New Project Overview fields
+        if draft.funding_type:
+            filled_fields += 1
+        if draft.commitment_allocation_days:
+            filled_fields += 1
+        if draft.minimum_commitment_fulfilment_percentage:
+            filled_fields += 1
+        if draft.mode_of_implementation:
+            filled_fields += 1
+        if draft.ownership:
+            filled_fields += 1
         if draft.state:
             filled_fields += 1
         if draft.city:
@@ -57,6 +68,15 @@ class ProjectDraftService:
         if draft.funding_requirement:
             filled_fields += 1
         if draft.already_secured_funds:
+            filled_fields += 1
+        # New Financial Information fields
+        if draft.tenure:
+            filled_fields += 1
+        if draft.cut_off_rate_percentage:
+            filled_fields += 1
+        if draft.minimum_commitment_amount:
+            filled_fields += 1
+        if draft.conditions:
             filled_fields += 1
         if draft.fundraising_start_date:
             filled_fields += 1
@@ -364,6 +384,12 @@ class ProjectDraftService:
                     description=draft.description,
                     start_date=draft.start_date,
                     end_date=draft.end_date,
+                    # New Project Overview fields
+                    funding_type=draft.funding_type,
+                    commitment_allocation_days=draft.commitment_allocation_days,
+                    minimum_commitment_fulfilment_percentage=draft.minimum_commitment_fulfilment_percentage,
+                    mode_of_implementation=draft.mode_of_implementation,
+                    ownership=draft.ownership,
                     state=draft.state,
                     city=draft.city,
                     ward=draft.ward,
@@ -371,6 +397,11 @@ class ProjectDraftService:
                     funding_requirement=draft.funding_requirement,
                     already_secured_funds=draft.already_secured_funds or Decimal('0'),
                     currency='INR',  # Always set by backend
+                    # New Financial Information fields
+                    tenure=draft.tenure,
+                    cut_off_rate_percentage=draft.cut_off_rate_percentage,
+                    minimum_commitment_amount=draft.minimum_commitment_amount,
+                    conditions=draft.conditions,
                     fundraising_start_date=draft.fundraising_start_date,
                     fundraising_end_date=draft.fundraising_end_date,
                     municipality_credit_rating=draft.municipality_credit_rating,

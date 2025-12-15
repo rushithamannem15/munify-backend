@@ -38,3 +38,38 @@ def get_project_stages(db: Session = Depends(get_db)):
         "data": stages
     }
 
+
+@router.get("/funding-types", response_model=MasterListResponse, status_code=status.HTTP_200_OK)
+def get_funding_types(db: Session = Depends(get_db)):
+    """Get all funding types from master table"""
+    service = MasterService(db)
+    funding_types = service.get_all_funding_types()
+    return {
+        "status": "success",
+        "message": "Funding types fetched successfully",
+        "data": funding_types
+    }
+
+
+@router.get("/mode-of-implementations", response_model=MasterListResponse, status_code=status.HTTP_200_OK)
+def get_mode_of_implementations(db: Session = Depends(get_db)):
+    """Get all modes of implementation from master table"""
+    service = MasterService(db)
+    modes = service.get_all_mode_of_implementations()
+    return {
+        "status": "success",
+        "message": "Modes of implementation fetched successfully",
+        "data": modes
+    }
+
+
+@router.get("/ownerships", response_model=MasterListResponse, status_code=status.HTTP_200_OK)
+def get_ownerships(db: Session = Depends(get_db)):
+    """Get all ownership types from master table"""
+    service = MasterService(db)
+    ownerships = service.get_all_ownerships()
+    return {
+        "status": "success",
+        "message": "Ownership types fetched successfully",
+        "data": ownerships
+    }

@@ -4,7 +4,16 @@ from fastapi import HTTPException, status
 from app.core.config import settings
 from app.models.project_category_master import ProjectCategoryMaster
 from app.models.project_stage_master import ProjectStageMaster
-from app.schemas.master import ProjectCategoryMasterResponse, ProjectStageMasterResponse
+from app.models.funding_type_master import FundingTypeMaster
+from app.models.mode_of_implementation_master import ModeOfImplementationMaster
+from app.models.ownership_master import OwnershipMaster
+from app.schemas.master import (
+    ProjectCategoryMasterResponse,
+    ProjectStageMasterResponse,
+    FundingTypeMasterResponse,
+    ModeOfImplementationMasterResponse,
+    OwnershipMasterResponse
+)
 
 
 class MasterService:
@@ -22,6 +31,24 @@ class MasterService:
         stages = self.db.query(ProjectStageMaster).order_by(ProjectStageMaster.id).all()
         # Convert SQLAlchemy models to Pydantic schemas
         return [ProjectStageMasterResponse.model_validate(stage) for stage in stages]
+    
+    def get_all_funding_types(self):
+        """Get all funding types from master table"""
+        funding_types = self.db.query(FundingTypeMaster).order_by(FundingTypeMaster.id).all()
+        # Convert SQLAlchemy models to Pydantic schemas
+        return [FundingTypeMasterResponse.model_validate(funding_type) for funding_type in funding_types]
+    
+    def get_all_mode_of_implementations(self):
+        """Get all modes of implementation from master table"""
+        modes = self.db.query(ModeOfImplementationMaster).order_by(ModeOfImplementationMaster.id).all()
+        # Convert SQLAlchemy models to Pydantic schemas
+        return [ModeOfImplementationMasterResponse.model_validate(mode) for mode in modes]
+    
+    def get_all_ownerships(self):
+        """Get all ownership types from master table"""
+        ownerships = self.db.query(OwnershipMaster).order_by(OwnershipMaster.id).all()
+        # Convert SQLAlchemy models to Pydantic schemas
+        return [OwnershipMasterResponse.model_validate(ownership) for ownership in ownerships]
 
 
 def fetch_roles_from_perdix() -> tuple:

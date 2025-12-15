@@ -1,4 +1,4 @@
-from sqlalchemy import Column, BigInteger, String, DateTime, Date, Text, Numeric, CheckConstraint
+from sqlalchemy import Column, BigInteger, String, DateTime, Date, Text, Numeric, Integer, CheckConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import relationship
@@ -29,6 +29,11 @@ class Project(Base):
     description = Column(Text, nullable=True)
     start_date = Column(Date, nullable=True)
     end_date = Column(Date, nullable=True)
+    funding_type = Column(String(100), nullable=True)  # e.g., loan, grant, equity
+    commitment_allocation_days = Column(Integer, nullable=True)  # Number of days for commitment allocation
+    minimum_commitment_fulfilment_percentage = Column(Numeric(5, 2), nullable=True)  # Minimum commitment fulfilment percentage
+    mode_of_implementation = Column(String(100), nullable=True)  # e.g., PPP, Government, Private
+    ownership = Column(String(100), nullable=True)  # e.g., Public, Private, Mixed
     
     # Location Information
     state = Column(String(255), nullable=True)
@@ -41,6 +46,10 @@ class Project(Base):
     already_secured_funds = Column(Numeric(15, 2), default=0, nullable=True)
     commitment_gap = Column(Numeric(15, 2), nullable=True)  # Generated column - read-only
     currency = Column(String(10), default='INR', nullable=True)
+    tenure = Column(Integer, nullable=True)  # Tenure in years
+    cut_off_rate_percentage = Column(Numeric(5, 2), nullable=True)  # Cut-off rate percentage
+    minimum_commitment_amount = Column(Numeric(15, 2), nullable=True)  # Minimum commitment amount
+    conditions = Column(Text, nullable=True)  # Conditions for the project
     
     # Fundraising Timeline
     fundraising_start_date = Column(TIMESTAMP(timezone=True), nullable=True)
