@@ -10,7 +10,9 @@ class PerdixUserDetail(Base):
     id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
     organization_name = Column(String(255), nullable=False)
     organization_type = Column(String(50), nullable=False)
-    user_id = Column(String(255), nullable=False, unique=True, index=True)
+    # Perdix user identifier (login). This is now nullable to allow
+    # creating the local record before syncing with Perdix.
+    user_id = Column(String(255), nullable=True, unique=True, index=True)
     user_role = Column(BigInteger, nullable=False)
     user_name = Column(String(200), nullable=True)
     user_email = Column(String(255), nullable=False)

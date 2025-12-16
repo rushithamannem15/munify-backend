@@ -150,16 +150,24 @@ class ProjectService:
         """
         Get project by reference ID and, if committed_by is provided,
         fetch the latest matching commitment for this project and committed_by.
+
+        Only commitments in the following statuses are considered:
+        - under_review
+        - approved
+        - funded
+        - completed
         """
         project = self.get_project_by_reference_id(project_reference_id)
 
         commitment: Optional[Commitment] = None
         if committed_by:
+            valid_statuses = ["under_review", "approved", "funded", "completed"]
             commitment = (
                 self.db.query(Commitment)
                 .filter(
                     Commitment.project_id == project_reference_id,
                     Commitment.committed_by == committed_by,
+                    Commitment.status.in_(valid_statuses),
                 )
                 .order_by(Commitment.created_at.desc())
                 .first()
@@ -202,7 +210,7 @@ class ProjectService:
             Project.id.desc()
         ).offset(skip).limit(limit).all()
 
-        # Optimize: Calculate favorite counts and user favorites in minimal queries
+        # Optimize: Calculate favorite counts, user favorites, and committed amounts in minimal queries
         if projects:
             project_ref_ids = [project.project_reference_id for project in projects]
             
@@ -227,6 +235,27 @@ class ProjectService:
                     ).all()
                     favorite_ref_set = {fav[0] for fav in user_favorites}
                 
+                # Single query to get total committed amounts for all projects
+                # Only count commitments with valid statuses: under_review, approved, funded, completed
+                valid_statuses = ["approved", "funded", "completed"]
+                committed_amounts = (
+                    self.db.query(
+                        Commitment.project_id,
+                        func.sum(Commitment.amount).label('total_amount')
+                    )
+                    .filter(
+                        Commitment.project_id.in_(project_ref_ids),
+                        Commitment.status.in_(valid_statuses)
+                    )
+                    .group_by(Commitment.project_id)
+                    .all()
+                )
+                
+                # Create dictionary for O(1) lookup
+                committed_amount_dict = {
+                    ref_id: total_amount for ref_id, total_amount in committed_amounts
+                }
+                
                 # Annotate all projects in a single loop
                 for project in projects:
                     # Always set favorite_count (default to 0 if no favorites)
@@ -235,10 +264,15 @@ class ProjectService:
                     # Set is_favorite only if user_id was provided
                     if user_id:
                         setattr(project, "is_favorite", project.project_reference_id in favorite_ref_set)
+                    
+                    # Set total_committed_amount (default to 0 if no commitments)
+                    total_committed = committed_amount_dict.get(project.project_reference_id, Decimal("0"))
+                    setattr(project, "total_committed_amount", total_committed)
             else:
                 # Edge case: projects exist but no ref_ids (shouldn't happen, but handle gracefully)
                 for project in projects:
                     setattr(project, "favorite_count", 0)
+                    setattr(project, "total_committed_amount", Decimal("0"))
                     if user_id:
                         setattr(project, "is_favorite", False)
         else:
@@ -582,28 +616,42 @@ class ProjectService:
                 .all()
             )
             
+            # Fetch all valid commitments for all projects in one query (fix N+1 problem)
+            # Only include commitments that are not rejected or withdrawn
+            project_ids = [row.project_id for row in results]
+            all_valid_commitments = (
+                self.db.query(Commitment)
+                .filter(
+                    Commitment.project_id.in_(project_ids),
+                    Commitment.status.in_(["under_review", "approved", "funded", "completed"]),
+                )
+                .all()
+            )
+            
+            # Group commitments by project_id for efficient lookup
+            commitments_by_project = {}
+            for commitment in all_valid_commitments:
+                if commitment.project_id not in commitments_by_project:
+                    commitments_by_project[commitment.project_id] = []
+                commitments_by_project[commitment.project_id].append(commitment)
+            
             # Process results and find best deal for each project
             summary_list = []
             for row in results:
                 project_ref_id = row.project_id
                 
                 # Find best deal: For loans, lowest interest rate; for others, highest amount
-                # Query all commitments for this project to find best deal
-                all_commitments = (
-                    self.db.query(Commitment)
-                    .filter(Commitment.project_id == project_ref_id)
-                    .all()
-                )
+                # Use pre-fetched commitments (excluding rejected/withdrawn)
+                project_commitments = commitments_by_project.get(project_ref_id, [])
                 
-                # Find best deal: For loans, lowest interest rate; for others, highest amount
                 best_deal_amount = None
                 best_deal_interest_rate = None
                 best_deal_funding_mode = None
                 
-                if all_commitments:
+                if project_commitments:
                     # Filter loans with interest rate
                     loans_with_rate = [
-                        c for c in all_commitments
+                        c for c in project_commitments
                         if c.funding_mode == "loan" and c.interest_rate is not None
                     ]
                     
@@ -619,7 +667,7 @@ class ProjectService:
                     else:
                         # No loans with rate, use highest amount commitment
                         best_commitment = max(
-                            all_commitments,
+                            project_commitments,
                             key=lambda x: x.amount
                         )
                         best_deal_amount = best_commitment.amount

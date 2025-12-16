@@ -3,6 +3,7 @@ from decimal import Decimal
 from datetime import datetime
 
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from fastapi import HTTPException, status
 
 from app.core.logging import get_logger
@@ -282,6 +283,55 @@ class CommitmentService:
 
             self._ensure_transition_allowed(commitment.status, "approved")
 
+            # Get the project for validation
+            project = self._get_project_by_reference_id(commitment.project_id)
+
+            # Validation 1: Amount must be positive
+            if commitment.amount <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Commitment amount must be greater than zero",
+                )
+
+            # Validation 2: Project status must be 'active'
+            if project.status != "active":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Cannot approve commitment for project with status '{project.status}'. Project must be 'active'",
+                )
+
+            # Validation 3: Check funding requirement - total approved + under_review commitments should not exceed funding_requirement
+            # Note: This commitment is currently 'under_review', so it's already included in the total
+            existing_commitments_total = (
+                self.db.query(func.sum(Commitment.amount))
+                .filter(
+                    Commitment.project_id == commitment.project_id,
+                    Commitment.status.in_(["approved", "under_review", "funded", "completed"]),
+                )
+                .scalar() or Decimal("0")
+            )
+
+            # Check if total commitments (including this one) exceed funding requirement
+            if existing_commitments_total > project.funding_requirement:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Total commitments ({existing_commitments_total}) exceed the project funding requirement "
+                           f"({project.funding_requirement}). Cannot approve this commitment.",
+                )
+
+            # Calculate project funding_raised BEFORE updating commitment status
+            # Sum of all approved/funded/completed commitments (excluding current one)
+            approved_commitments_total = (
+                self.db.query(func.sum(Commitment.amount))
+                .filter(
+                    Commitment.project_id == commitment.project_id,
+                    Commitment.status.in_(["approved", "funded", "completed"]),
+                    Commitment.id != commitment.id,  # Exclude current commitment
+                )
+                .scalar() or Decimal("0")
+            )
+            
+            # Update commitment status
             commitment.status = "approved"
             commitment.approved_by = approved_by
             commitment.approved_at = datetime.now()
@@ -289,6 +339,11 @@ class CommitmentService:
                 commitment.rejection_notes = approval_notes
             commitment.updated_by = approved_by
             commitment.updated_at = datetime.now()
+
+            # Update project funding_raised (sum of all approved commitments including this one)
+            project.funding_raised = approved_commitments_total + commitment.amount
+            project.updated_at = datetime.now()
+            project.updated_by = approved_by
 
             self._create_history_snapshot(
                 commitment=commitment,

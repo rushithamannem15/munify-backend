@@ -102,6 +102,22 @@ class UserRegistrationCreate(BaseModel):
     # Optional fields
     designation: Optional[str] = None
     regulatoryRegistrationNo: Optional[str] = Field(None, alias="regulatoryRegistrationNo")
+    # Municipality-specific fields (for Municipality org type)
+    municipalityStateDistrict: Optional[str] = Field(
+        None,
+        alias="municipalityStateDistrict",
+        description="State/District information for municipalities",
+    )
+    gstnOrUlbCode: Optional[str] = Field(
+        None,
+        alias="gstnOrUlbCode",
+        description="GSTN or ULB code for municipalities",
+    )
+    annualBudgetSize: Optional[Decimal] = Field(
+        None,
+        alias="annualBudgetSize",
+        description="Annual budget size for municipalities",
+    )
     
     # User roles (ignored for now, will be handled in next phase)
     userRoles: Optional[List[UserRoleInfo]] = Field(default_factory=list, alias="userRoles")

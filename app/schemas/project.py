@@ -126,6 +126,10 @@ class ProjectResponse(BaseModel):
         None,
         description="Commitment details for this project and committed_by (only set when requested in project reference API)",
     )
+    total_committed_amount: Optional[Decimal] = Field(
+        None,
+        description="Total amount committed for this project (sum of commitments with status: under_review, approved, funded, completed)"
+    )
     
     model_config = ConfigDict(from_attributes=True)
 
