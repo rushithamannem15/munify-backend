@@ -18,6 +18,7 @@ from app.models.commitment_history import CommitmentHistory
 from app.models.project_note import ProjectNote
 from app.models.perdix_user_detail import PerdixUserDetail
 from app.models.perdix_file import PerdixFile
+from app.models.perdix_org_detail import PerdixOrgDetail
 
 # Export all models for convenience
 __all__ = [
@@ -34,5 +35,6 @@ __all__ = [
     "QuestionReply",
     "ProjectNote",
     "PerdixUserDetail",
-    "PerdixFile"
+    "PerdixFile",
+    "PerdixOrgDetail",
 ]

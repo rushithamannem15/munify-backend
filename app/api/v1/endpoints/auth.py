@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Header
 from fastapi.responses import JSONResponse
-from app.services.auth_service import obtain_jwt_from_perdix, request_password_otp_from_perdix, change_password_with_otp
+from app.services.auth_service import obtain_jwt_from_perdix, request_password_otp_from_perdix, change_password_with_otp, logout_user_from_perdix
 from app.schemas.auth import ChangePasswordWithOTP
 
 
@@ -52,4 +52,21 @@ def change_password_with_otp_endpoint(password_data: ChangePasswordWithOTP):
         return JSONResponse({"status": "success", "message": "Password changed successfully", "data": content}, status_code=status_code)
     error_message = content if isinstance(content, str) else (content.get("message") or "Password change failed")
     return JSONResponse({"status": "error", "message": error_message, "data": content if not isinstance(content, str) else None}, status_code=status_code)
+
+
+@router.post("/logout")
+def logout(
+    authorization: str = Header(..., description="Authorization header with JWT token (format: 'JWT <token>' or 'Bearer <token>')")
+):
+    """
+    Logout user from Perdix using JWT token from Authorization header.
+    
+    The frontend should pass the JWT token in the Authorization header.
+    The token can be prefixed with 'JWT ' or 'Bearer ' or sent as-is.
+    
+    Returns the response directly from Perdix.
+    """
+    body, status_code, is_json = logout_user_from_perdix(authorization)
+    content = body if is_json else {"raw": body}
+    return JSONResponse(content=content, status_code=status_code)
 

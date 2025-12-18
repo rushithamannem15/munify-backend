@@ -1,7 +1,9 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from typing import Dict, Any
+from datetime import datetime, timezone
 from app.models.perdix_user_detail import PerdixUserDetail
+from app.models.invitation import Invitation
 from app.schemas.user_registration import UserRegistrationCreate, PerdixUserCreatePayload, UserRegistrationResponse
 from app.services.user_service import create_user_in_perdix
 from app.core.logging import get_logger
@@ -66,6 +68,48 @@ class UserRegistrationService:
         
         return perdix_payload
     
+    def _mark_invitation_accepted(self, user_id: str, email: str) -> None:
+        """
+        Mark invitation as accepted (status='A') after successful user registration.
+        
+        Args:
+            user_id: The Perdix user_id (login) of the registered user
+            email: The email address of the registered user
+        
+        This method:
+        1. Tries to find invitation by user_id first
+        2. Falls back to matching by email if not found by user_id
+        3. Updates invitation status to 'A' and sets accepted_at timestamp
+        4. Logs errors but doesn't raise exceptions (non-blocking)
+        """
+        try:
+            # First try to match by user_id
+            invitation = self.db.query(Invitation).filter(
+                Invitation.user_id == user_id
+            ).first()
+            
+            # Fallback: if not found by user_id, try matching by email
+            if not invitation:
+                invitation = self.db.query(Invitation).filter(
+                    Invitation.email == email
+                ).first()
+            
+            if invitation:
+                invitation.status = "A"
+                invitation.accepted_at = datetime.now(timezone.utc)
+                invitation.updated_at = datetime.now(timezone.utc)
+                self.db.commit()
+                logger.info(f"Invitation {invitation.id} marked as accepted for user_id: {user_id}, email: {email}")
+            else:
+                logger.warning(f"No invitation found for user_id: {user_id} or email: {email}")
+        except Exception as invite_exc:
+            # Log error but don't fail registration if invitation update fails
+            logger.error(
+                f"Failed to update invitation status for user_id {user_id}: {invite_exc}",
+                exc_info=True
+            )
+            # Don't rollback user registration if invitation update fails
+    
     def register_user(self, registration_data: UserRegistrationCreate, created_by: str = None) -> UserRegistrationResponse:
         """
         Register a new user:
@@ -94,23 +138,12 @@ class UserRegistrationService:
                 user_name=registration_data.fullName,
                 user_email=registration_data.email,
                 user_mobile_number=str(registration_data.mobileNumber),
-                designation=payload_dict.get('designation'),
-                registration_number=payload_dict.get('regulatoryRegistrationNo'),
                 is_tc_accepted=payload_dict.get('is_tc_accepted', False),
-                # Map municipality-specific fields when present
-                # municipalityStateDistrict -> district
-                # gstnOrUlbCode -> gstn_ulb_code
-                # annualBudgetSize -> annual_budget_size
-                state=payload_dict.get('state'),
-                district=payload_dict.get('municipalityStateDistrict') or payload_dict.get('district'),
-                gstn_ulb_code=payload_dict.get('gstnOrUlbCode') or payload_dict.get('gstn_ulb_code'),
-                annual_budget_size=payload_dict.get('annualBudgetSize') or payload_dict.get('annual_budget_size'),
                 status=payload_dict.get('status', 'ACTIVE'),
                 is_mobile_verified=payload_dict.get('is_mobile_verified', False),
                 mobile_verified_at=payload_dict.get('mobile_verified_at'),
                 created_by=created_by,
                 updated_by=created_by,
-                file_id=payload_dict.get('file_id'),
             )
 
             self.db.add(db_user)
@@ -182,6 +215,9 @@ class UserRegistrationService:
             self.db.refresh(db_user)
 
             logger.info(f"User registration completed successfully: local_id={db_user.id}, user_id={db_user.user_id}")
+
+            # 6) Update invitation status to "A" (Accepted) based on user_id
+            self._mark_invitation_accepted(perdix_user_id, registration_data.email)
 
             logger.info(f"User registered successfully: {db_user.id}, user_id: {db_user.user_id}")
             

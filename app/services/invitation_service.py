@@ -1,11 +1,51 @@
 import uuid
 import secrets
-from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
+from datetime import datetime, timedelta, timezone
+
 from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
 from app.models.invitation import Invitation
 from app.schemas.invitation import InvitationCreate
-from app.core.config import settings
+
+
+def _is_invitation_used(invitation: Invitation) -> bool:
+    """
+    Backward-compatible notion of "used" based on the new status field.
+
+    Previously this was a simple boolean `is_used`. With the Perdix schema we
+    treat an invitation as "used" when it has been accepted (status == 'A').
+    """
+    return invitation.status == "A"
+
+
+def _build_invitation_response(invitation: Invitation) -> dict:
+    """Build complete invitation response dictionary with all necessary fields."""
+    invite_link = f"{settings.FRONTEND_ORIGIN}/register?token={invitation.token}"
+    return {
+        "id": invitation.id,
+        "organization_id": int(invitation.organization_id),
+        "organization_type_id": int(invitation.organization_type_id),
+        "full_name": invitation.full_name,
+        "user_id": invitation.user_id,
+        "email": invitation.email,
+        "mobile_number": invitation.mobile_number,
+        "role_id": int(invitation.role_id),
+        "role_name": invitation.role_name,
+        "token": invitation.token,
+        "expiry": invitation.expiry,
+        "is_used": _is_invitation_used(invitation),
+        "status": invitation.status,
+        "invited_by": invitation.invited_by,
+        "accepted_at": invitation.accepted_at,
+        "resend_count": invitation.resend_count or 0,
+        "created_at": invitation.created_at,
+        "created_by": invitation.created_by,
+        "updated_at": invitation.updated_at,
+        "updated_by": invitation.updated_by,
+        "invite_link": invite_link,
+    }
 
 
 def generate_invitation_token(db: Session, length_bytes: int = 9, max_attempts: int = 5) -> str:
@@ -20,201 +60,150 @@ def generate_invitation_token(db: Session, length_bytes: int = 9, max_attempts: 
             return token
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="Could not generate unique invitation token. Please try again."
+        detail="Could not generate unique invitation token. Please try again.",
     )
 
 
 def create_invitation(payload: InvitationCreate, db: Session) -> dict:
-    """Create a new invitation and return invitation details"""
-    
-    # Check if invitation already exists for this email
-    existing_invitation = db.query(Invitation).filter(Invitation.email == payload.email).first()
-    if existing_invitation and not existing_invitation.is_used:
+    """Create a new invitation and return invitation details.
+
+    Behavioural parity with the old implementation:
+    - Reject if there is already an active invitation for the same email
+      (extended here to also match mobile_number to better reflect the new schema).
+    - Generate a token and 7-day expiry.
+    """
+
+    # Check if invitation already exists for this email & mobile number and is still pending
+    existing_invitation = (
+        db.query(Invitation)
+        .filter(
+            Invitation.email == payload.email,
+            Invitation.mobile_number == str(payload.mobile_number),
+            Invitation.status == "P",
+        )
+        .first()
+    )
+    if existing_invitation:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Invitation already exists for this email"
+            detail="Invitation already exists for this email and mobile number",
         )
-    
+
     # Generate token and expiry (7 days from now)
     token = generate_invitation_token(db)
-    expiry = datetime.utcnow() + timedelta(days=7)
-    
+    expiry = datetime.now(timezone.utc) + timedelta(days=7)
+
     # Create invitation record
     invitation = Invitation(
-        organization_id=payload.organization_id,
-        organization_type_id=payload.organization_type_id,
+        organization_id=str(payload.organization_id),
+        organization_type_id=str(payload.organization_type_id),
         full_name=payload.full_name,
-        user_id=payload.user_id,
+        user_id=str(payload.user_id),
         email=payload.email,
         mobile_number=str(payload.mobile_number),
-        role_id=payload.role_id,
+        role_id=str(payload.role_id),
         role_name=payload.role_name,
+        invited_by=payload.invited_by,
         token=token,
         expiry=expiry,
-        is_used=False
+        status="P",
     )
-    
+
     db.add(invitation)
     db.commit()
     db.refresh(invitation)
-    
-    # Generate invitation link
-    invite_link = f"{settings.FRONTEND_ORIGIN}/register?token={token}"
-    
-    return {
-        "id": invitation.id,
-        "organization_id": invitation.organization_id,
-        "organization_type_id": invitation.organization_type_id,
-        "full_name": invitation.full_name,
-        "user_id": invitation.user_id,
-        "email": invitation.email,
-        "mobile_number": invitation.mobile_number,
-        "role_id": invitation.role_id,
-        "role_name": invitation.role_name,
-        "token": invitation.token,
-        "expiry": invitation.expiry,
-        "is_used": invitation.is_used,
-        "created_at": invitation.created_at,
-        "updated_at": invitation.updated_at,
-        "invite_link": invite_link
-    }
+
+    return _build_invitation_response(invitation)
 
 
 def validate_invitation_token(token: str, db: Session) -> dict:
-    """Validate invitation token and return invitation details"""
-    
+    """Validate invitation token and return invitation details."""
+
     invitation = db.query(Invitation).filter(Invitation.token == token).first()
-    
+
     if not invitation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Invalid invitation token"
+            detail="Invalid invitation token",
         )
-    
-    if invitation.is_used:
+
+    if _is_invitation_used(invitation):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invitation has already been used"
+            detail="Invitation has already been used",
         )
-    
-    if datetime.utcnow() > invitation.expiry:
+
+    if datetime.now(timezone.utc) > invitation.expiry:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invitation has expired"
+            detail="Invitation has expired",
         )
-    
-    invite_link = f"{settings.FRONTEND_ORIGIN}/register?token={invitation.token}"
-    return {
-        "id": invitation.id,
-        "organization_id": invitation.organization_id,
-        "organization_type_id": invitation.organization_type_id,
-        "full_name": invitation.full_name,
-        "user_id": invitation.user_id,
-        "email": invitation.email,
-        "mobile_number": invitation.mobile_number,
-        "role_id": invitation.role_id,
-        "role_name": invitation.role_name,
-        "token": invitation.token,
-        "expiry": invitation.expiry,
-        "is_used": invitation.is_used,
-        "created_at": invitation.created_at,
-        "updated_at": invitation.updated_at,
-        "invite_link": invite_link,
-    }
+
+    return _build_invitation_response(invitation)
 
 
 def mark_invitation_used(token: str, db: Session) -> bool:
-    """Mark invitation as used after successful registration"""
-    
+    """Mark invitation as used after successful registration.
+
+    With the new schema, this corresponds to setting status='A' and accepted_at.
+    """
+
     invitation = db.query(Invitation).filter(Invitation.token == token).first()
-    
+
     if not invitation:
         return False
-    
-    invitation.is_used = True
-    invitation.updated_at = datetime.utcnow()
+
+    invitation.status = "A"
+    invitation.accepted_at = datetime.now(timezone.utc)
+    invitation.updated_at = datetime.now(timezone.utc)
     db.commit()
-    
+
     return True
 
 
 def get_invitations(skip: int = 0, limit: int = 100, db: Session = None) -> dict:
-    """Get list of invitations with pagination"""
-    
+    """Get list of invitations with pagination."""
+
     query = db.query(Invitation)
     total = query.count()
     invitations = query.offset(skip).limit(limit).all()
-    
+
     invitation_list = []
     for invitation in invitations:
-        invite_link = f"{settings.FRONTEND_ORIGIN}/register?token={invitation.token}"
-        invitation_list.append({
-            "id": invitation.id,
-            "organization_id": invitation.organization_id,
-            "organization_type_id": invitation.organization_type_id,
-            "full_name": invitation.full_name,
-            "user_id": invitation.user_id,
-            "email": invitation.email,
-            "mobile_number": invitation.mobile_number,
-            "role_id": invitation.role_id,
-            "role_name": invitation.role_name,
-            "token": invitation.token,
-            "expiry": invitation.expiry,
-            "is_used": invitation.is_used,
-            "created_at": invitation.created_at,
-            "updated_at": invitation.updated_at,
-            "invite_link": invite_link
-        })
-    
+        invitation_list.append(_build_invitation_response(invitation))
+
     return {
         "status": "success",
         "message": "Invitations fetched successfully",
         "data": invitation_list,
-        "total": total
+        "total": total,
     }
 
 
 def resend_invitation(invitation_id: int, db: Session) -> dict:
-    """Resend invitation by generating new token and extending expiry"""
-    
+    """Resend invitation by generating new token and extending expiry."""
+
     invitation = db.query(Invitation).filter(Invitation.id == invitation_id).first()
-    
+
     if not invitation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Invitation not found"
+            detail="Invitation not found",
         )
-    
-    if invitation.is_used:
+
+    if _is_invitation_used(invitation):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot resend used invitation"
+            detail="Cannot resend used invitation",
         )
-    
+
     # Generate new token and extend expiry
     invitation.token = generate_invitation_token(db)
-    invitation.expiry = datetime.utcnow() + timedelta(days=7)
-    invitation.updated_at = datetime.utcnow()
-    
+    invitation.expiry = datetime.now(timezone.utc) + timedelta(days=7)
+    invitation.updated_at = datetime.now(timezone.utc)
+    invitation.resend_count = (invitation.resend_count or 0) + 1
+
     db.commit()
     db.refresh(invitation)
-    
-    invite_link = f"{settings.FRONTEND_ORIGIN}/register?token={invitation.token}"
-    
-    return {
-        "id": invitation.id,
-        "organization_id": invitation.organization_id,
-        "organization_type_id": invitation.organization_type_id,
-        "full_name": invitation.full_name,
-        "user_id": invitation.user_id,
-        "email": invitation.email,
-        "mobile_number": invitation.mobile_number,
-        "role_id": invitation.role_id,
-        "role_name": invitation.role_name,
-        "token": invitation.token,
-        "expiry": invitation.expiry,
-        "is_used": invitation.is_used,
-        "created_at": invitation.created_at,
-        "updated_at": invitation.updated_at,
-        "invite_link": invite_link
-    }
+
+    return _build_invitation_response(invitation)

@@ -128,6 +128,7 @@ CREATE TABLE perdix_mp_invites (
     organization_id varchar(255) NOT NULL ,
     organization_type VARCHAR(50) NOT NULL ,
     role_id varchar(255) NOT NULL ,
+    role_name VARCHAR(100) NOT NULL ,
     invited_by VARCHAR(255) NOT NULL ,
     status VARCHAR(50) DEFAULT 'P' CHECK (status IN ('P', 'A', 'E', 'R')),
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,

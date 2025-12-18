@@ -153,13 +153,7 @@ class UserRegistrationResponse(BaseModel):
     user_name: Optional[str]
     user_email: str
     user_mobile_number: Optional[str]
-    designation: Optional[str]
-    registration_number: Optional[str]
     is_tc_accepted: bool
-    state: Optional[str]
-    district: Optional[str]
-    gstn_ulb_code: Optional[str]
-    annual_budget_size: Optional[Decimal]
     status: Optional[str]
     is_mobile_verified: bool
     mobile_verified_at: Optional[datetime]
@@ -167,7 +161,6 @@ class UserRegistrationResponse(BaseModel):
     created_by: Optional[str]
     updated_at: datetime
     updated_by: Optional[str]
-    file_id: Optional[int]
     
     model_config = {"from_attributes": True}
 

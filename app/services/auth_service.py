@@ -126,3 +126,47 @@ def get_redirect_url(branch_name: str) -> dict:
     return {"redirectURL": "/dashboard"}
 
 
+def logout_user_from_perdix(authorization_header: str) -> tuple:
+    """Logout user from Perdix using the provided JWT token.
+    
+    Args:
+        authorization_header: Authorization header value (can be "JWT <token>", "Bearer <token>", or just "<token>")
+    
+    Returns:
+        tuple: (response_body, status_code, is_json)
+    """
+    base_url = settings.PERDIX_ORIGIN.rstrip("/")
+    url = f"{base_url}/gateway/jwt/logout"
+    
+    if not authorization_header:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization header is required"
+        )
+    
+    # Normalize authorization header
+    # If it doesn't start with "JWT " or "Bearer ", assume it's just the token and prepend "JWT "
+    auth_header = authorization_header.strip()
+    if not (auth_header.startswith("JWT ") or auth_header.startswith("Bearer ") or 
+            auth_header.startswith("jwt ") or auth_header.startswith("bearer ")):
+        auth_header = f"JWT {auth_header}"
+    
+    headers = {
+        "authorization": auth_header,
+    }
+    
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(url, headers=headers)
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to connect to Perdix logout API: {str(exc)}"
+        )
+    
+    try:
+        return response.json(), response.status_code, True
+    except ValueError:
+        return response.text, response.status_code, False
+
+
