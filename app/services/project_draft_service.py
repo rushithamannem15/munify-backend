@@ -387,6 +387,7 @@ class ProjectDraftService:
                     # New Project Overview fields
                     funding_type=draft.funding_type,
                     commitment_allocation_days=draft.commitment_allocation_days,
+                    commitment_gap=draft.commitment_gap,
                     minimum_commitment_fulfilment_percentage=draft.minimum_commitment_fulfilment_percentage,
                     mode_of_implementation=draft.mode_of_implementation,
                     ownership=draft.ownership,

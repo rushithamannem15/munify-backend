@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import (
     master,
+    master_common,
     auth,
     invitations,
     user_roles,
@@ -22,6 +23,7 @@ api_router.include_router(invitations.router, prefix="/invitations", tags=["invi
 api_router.include_router(user_roles.router, prefix="/user-roles", tags=["user-roles"])
 api_router.include_router(organizations.router, prefix="/organizations", tags=["organizations"])
 api_router.include_router(master.router, prefix="/master", tags=["master"])
+api_router.include_router(master_common.router, prefix="/master/common", tags=["master-common"])
 api_router.include_router(projects.router, prefix="/projects", tags=["projects"])
 api_router.include_router(project_drafts.router, prefix="/project-drafts", tags=["project-drafts"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])

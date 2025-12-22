@@ -64,6 +64,7 @@ class ProjectDraftUpdate(BaseModel):
     start_date: Optional[date] = Field(None, description="Project start date")
     end_date: Optional[date] = Field(None, description="Project end date")
     funding_type: Optional[str] = Field(None, max_length=100, description="Funding type: e.g., loan, grant, equity")
+    commitment_gap: Optional[Decimal] = Field(None, description="Commitment gap amount")
     commitment_allocation_days: Optional[int] = Field(None, description="Number of days for commitment allocation")
     minimum_commitment_fulfilment_percentage: Optional[Decimal] = Field(None, description="Minimum commitment fulfilment percentage")
     mode_of_implementation: Optional[str] = Field(None, max_length=100, description="Mode of implementation: e.g., PPP, Government, Private")
