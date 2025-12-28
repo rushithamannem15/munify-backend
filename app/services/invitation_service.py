@@ -162,11 +162,11 @@ def mark_invitation_used(token: str, db: Session) -> bool:
 
 
 def get_invitations(skip: int = 0, limit: int = 100, db: Session = None) -> dict:
-    """Get list of invitations with pagination."""
+    """Get list of invitations with pagination, ordered by most recent first."""
 
     query = db.query(Invitation)
     total = query.count()
-    invitations = query.offset(skip).limit(limit).all()
+    invitations = query.order_by(Invitation.created_at.desc(), Invitation.id.desc()).offset(skip).limit(limit).all()
 
     invitation_list = []
     for invitation in invitations:
