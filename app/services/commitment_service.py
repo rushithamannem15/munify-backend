@@ -312,11 +312,11 @@ class CommitmentService:
             )
 
             # Check if total commitments (including this one) exceed funding requirement
-            if existing_commitments_total > project.funding_requirement:
+            if existing_commitments_total > project.commitment_gap:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Total commitments ({existing_commitments_total}) exceed the project funding requirement "
-                           f"({project.funding_requirement}). Cannot approve this commitment.",
+                           f"({project.commitment_gap}). Cannot approve this commitment.",
                 )
 
             # Calculate project funding_raised BEFORE updating commitment status

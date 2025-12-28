@@ -58,10 +58,27 @@ class OwnershipMasterResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+
 class MasterListResponse(BaseModel):
     status: str
     message: str
     data: list
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BulkInsertResponse(BaseModel):
+    status: str
+    message: str
+    data: dict
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BulkDeleteResponse(BaseModel):
+    status: str
+    message: str
+    data: dict
     
     model_config = ConfigDict(from_attributes=True)
 
