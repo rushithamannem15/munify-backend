@@ -82,3 +82,29 @@ class BulkDeleteResponse(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
 
+
+class StateMunicipalityMappingResponse(BaseModel):
+    id: int
+    state: str
+    municipality: str
+    created_at: Optional[datetime] = None
+    created_by: Optional[str] = None
+    updated_at: Optional[datetime] = None
+    updated_by: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StateResponse(BaseModel):
+    state: str
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MunicipalityResponse(BaseModel):
+    id: int
+    municipality: str
+    state: str
+    
+    model_config = ConfigDict(from_attributes=True)
+

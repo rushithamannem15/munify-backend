@@ -2,17 +2,22 @@ import httpx
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from app.core.config import settings
+from sqlalchemy import distinct
 from app.models.project_category_master import ProjectCategoryMaster
 from app.models.project_stage_master import ProjectStageMaster
 from app.models.funding_type_master import FundingTypeMaster
 from app.models.mode_of_implementation_master import ModeOfImplementationMaster
 from app.models.ownership_master import OwnershipMaster
+from app.models.state_municipality_mapping import StateMunicipalityMapping
 from app.schemas.master import (
     ProjectCategoryMasterResponse,
     ProjectStageMasterResponse,
     FundingTypeMasterResponse,
     ModeOfImplementationMasterResponse,
-    OwnershipMasterResponse
+    OwnershipMasterResponse,
+    StateResponse,
+    MunicipalityResponse,
+    StateMunicipalityMappingResponse
 )
 
 
@@ -49,6 +54,35 @@ class MasterService:
         ownerships = self.db.query(OwnershipMaster).order_by(OwnershipMaster.id).all()
         # Convert SQLAlchemy models to Pydantic schemas
         return [OwnershipMasterResponse.model_validate(ownership) for ownership in ownerships]
+    
+    def get_distinct_states(self):
+        """Get distinct states from state-municipality mapping table"""
+        states = self.db.query(distinct(StateMunicipalityMapping.state)).order_by(StateMunicipalityMapping.state).all()
+        # Extract state names from tuples
+        state_list = [state[0] for state in states]
+        # Convert to response schema
+        return [StateResponse(state=state) for state in state_list]
+    
+    def get_municipalities_by_state(self, state: str):
+        """Get all municipalities for a given state"""
+        municipalities = self.db.query(StateMunicipalityMapping).filter(
+            StateMunicipalityMapping.state == state
+        ).order_by(StateMunicipalityMapping.municipality).all()
+        # Convert SQLAlchemy models to Pydantic schemas
+        return [MunicipalityResponse(
+            id=municipality.id,
+            municipality=municipality.municipality,
+            state=municipality.state
+        ) for municipality in municipalities]
+    
+    def get_all_state_municipality_mappings(self):
+        """Get all state-municipality mappings"""
+        mappings = self.db.query(StateMunicipalityMapping).order_by(
+            StateMunicipalityMapping.state,
+            StateMunicipalityMapping.municipality
+        ).all()
+        # Convert SQLAlchemy models to Pydantic schemas
+        return [StateMunicipalityMappingResponse.model_validate(mapping) for mapping in mappings]
 
 
 def fetch_roles_from_perdix() -> tuple:
