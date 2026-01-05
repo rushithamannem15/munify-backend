@@ -325,7 +325,22 @@ class ProjectService:
         organization_type: str = None,
         status: str = None,
         visibility: str = None,
+        state: str = None,
         user_id: str = None,
+        search: str = None,
+        states: str = None,
+        categories: str = None,
+        project_stage: str = None,
+        municipality_credit_rating: str = None,
+        funding_type: str = None,
+        mode_of_implementation: str = None,
+        ownership: str = None,
+        min_funding_requirement: Decimal = None,
+        max_funding_requirement: Decimal = None,
+        min_commitment_gap: Decimal = None,
+        max_commitment_gap: Decimal = None,
+        min_total_project_cost: Decimal = None,
+        max_total_project_cost: Decimal = None,
     ) -> Tuple[list[Project], int]:
         """Get list of projects with optional filters, ordered by most recent first"""
         query = self.db.query(Project)
@@ -335,6 +350,11 @@ class ProjectService:
             self._validate_status(status)
             query = query.filter(Project.status == status)
         
+        # Validate project_stage if provided
+        if project_stage:
+            self._validate_project_stage(project_stage)
+            query = query.filter(Project.project_stage == project_stage)
+        
         # Apply other filters
         if organization_id:
             query = query.filter(Project.organization_id == organization_id)
@@ -342,6 +362,52 @@ class ProjectService:
             query = query.filter(Project.organization_type == organization_type)
         if visibility:
             query = query.filter(Project.visibility == visibility)
+        # Use states parameter if provided, otherwise fall back to state (for backward compatibility)
+        state_filter = states if states else state
+        if state_filter:
+            query = query.filter(Project.state == state_filter)
+        
+        # Search by project_reference_id
+        if search:
+            query = query.filter(Project.project_reference_id.ilike(f"%{search}%"))
+        
+        # Category filter
+        if categories:
+            query = query.filter(Project.category == categories)
+        
+        # Municipality credit rating filter
+        if municipality_credit_rating:
+            query = query.filter(Project.municipality_credit_rating == municipality_credit_rating)
+        
+        # Funding type filter
+        if funding_type:
+            query = query.filter(Project.funding_type == funding_type)
+        
+        # Mode of implementation filter
+        if mode_of_implementation:
+            query = query.filter(Project.mode_of_implementation == mode_of_implementation)
+        
+        # Ownership filter
+        if ownership:
+            query = query.filter(Project.ownership == ownership)
+        
+        # Range filters for funding_requirement
+        if min_funding_requirement is not None:
+            query = query.filter(Project.funding_requirement >= min_funding_requirement)
+        if max_funding_requirement is not None:
+            query = query.filter(Project.funding_requirement <= max_funding_requirement)
+        
+        # Range filters for commitment_gap
+        if min_commitment_gap is not None:
+            query = query.filter(Project.commitment_gap >= min_commitment_gap)
+        if max_commitment_gap is not None:
+            query = query.filter(Project.commitment_gap <= max_commitment_gap)
+        
+        # Range filters for total_project_cost
+        if min_total_project_cost is not None:
+            query = query.filter(Project.total_project_cost >= min_total_project_cost)
+        if max_total_project_cost is not None:
+            query = query.filter(Project.total_project_cost <= max_total_project_cost)
         
         # Get total count before pagination
         total = query.count()
@@ -1003,5 +1069,88 @@ class ProjectService:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to fetch projects funded by user: {str(e)}"
+            )
+    
+    def get_distinct_states(self) -> List[str]:
+        """Get all distinct states from projects table, ordered alphabetically."""
+        try:
+            distinct_states = (
+                self.db.query(Project.state)
+                .filter(Project.state.isnot(None))
+                .filter(Project.state != "")
+                .distinct()
+                .order_by(Project.state)
+                .all()
+            )
+            # Extract state values from tuples (query returns tuples when selecting single column)
+            states = [state[0].strip() for state in distinct_states if state[0] and state[0].strip()]
+            return states
+        except Exception as e:
+            logger.error(f"Error fetching distinct states: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to fetch distinct states: {str(e)}"
+            )
+    
+    def get_distinct_municipality_credit_ratings(self) -> List[str]:
+        """Get all distinct municipality_credit_rating values from projects table, ordered alphabetically."""
+        try:
+            distinct_ratings = (
+                self.db.query(Project.municipality_credit_rating)
+                .filter(Project.municipality_credit_rating.isnot(None))
+                .filter(Project.municipality_credit_rating != "")
+                .distinct()
+                .order_by(Project.municipality_credit_rating)
+                .all()
+            )
+            # Extract rating values from tuples (query returns tuples when selecting single column)
+            ratings = [rating[0].strip() for rating in distinct_ratings if rating[0] and rating[0].strip()]
+            return ratings
+        except Exception as e:
+            logger.error(f"Error fetching distinct municipality credit ratings: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to fetch distinct municipality credit ratings: {str(e)}"
+            )
+    
+    def get_value_ranges(self) -> dict:
+        """Get min and max ranges for funding_requirement, commitment_gap, and total_project_cost fields."""
+        try:
+            # Get max funding_requirement (min is always 0)
+            max_funding_requirement_result = (
+                self.db.query(func.max(Project.funding_requirement))
+                .scalar()
+            )
+            max_funding_requirement = Decimal('0') if max_funding_requirement_result is None else max_funding_requirement_result
+            
+            # Get max commitment_gap where not null (min is always 0)
+            max_commitment_gap_result = (
+                self.db.query(func.max(Project.commitment_gap))
+                .filter(Project.commitment_gap.isnot(None))
+                .scalar()
+            )
+            max_commitment_gap = Decimal('0') if max_commitment_gap_result is None else max_commitment_gap_result
+            
+            # Get max total_project_cost where not null (min is always 0)
+            max_total_project_cost_result = (
+                self.db.query(func.max(Project.total_project_cost))
+                .filter(Project.total_project_cost.isnot(None))
+                .scalar()
+            )
+            max_total_project_cost = Decimal('0') if max_total_project_cost_result is None else max_total_project_cost_result
+            
+            return {
+                "min_funding_requirement": Decimal('0'),
+                "max_funding_requirement": max_funding_requirement,
+                "min_commitment_gap": Decimal('0'),
+                "max_commitment_gap": max_commitment_gap,
+                "min_total_project_cost": Decimal('0'),
+                "max_total_project_cost": max_total_project_cost,
+            }
+        except Exception as e:
+            logger.error(f"Error fetching value ranges: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to fetch value ranges: {str(e)}"
             )
 

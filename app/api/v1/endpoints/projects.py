@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form, Header
 from typing import Optional
 from sqlalchemy.orm import Session
+from decimal import Decimal
+from typing import Optional
 from app.core.database import get_db
 from app.schemas.project import (
     ProjectCreate,
@@ -341,6 +343,66 @@ def get_projects_funded_by_user(
         )
 
 
+@router.get("/states", response_model=dict, status_code=status.HTTP_200_OK)
+def get_distinct_states(db: Session = Depends(get_db)):
+    """Get all distinct states from projects table, ordered alphabetically."""
+    try:
+        service = ProjectService(db)
+        states = service.get_distinct_states()
+        return {
+            "status": "success",
+            "message": "Distinct states fetched successfully",
+            "data": states
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch distinct states: {str(e)}"
+        )
+
+
+@router.get("/value-ranges", response_model=dict, status_code=status.HTTP_200_OK)
+def get_value_ranges(db: Session = Depends(get_db)):
+    """Get min and max ranges for funding_requirement and commitment_gap fields."""
+    try:
+        service = ProjectService(db)
+        ranges = service.get_value_ranges()
+        return {
+            "status": "success",
+            "message": "Value ranges fetched successfully",
+            "data": ranges
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch value ranges: {str(e)}"
+        )
+
+
+@router.get("/municipality-credit-ratings", response_model=dict, status_code=status.HTTP_200_OK)
+def get_distinct_municipality_credit_ratings(db: Session = Depends(get_db)):
+    """Get all distinct municipality_credit_rating values from projects table, ordered alphabetically."""
+    try:
+        service = ProjectService(db)
+        ratings = service.get_distinct_municipality_credit_ratings()
+        return {
+            "status": "success",
+            "message": "Distinct municipality credit ratings fetched successfully",
+            "data": ratings
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch distinct municipality credit ratings: {str(e)}"
+        )
+
+
 @router.get("/{project_id}", response_model=dict, status_code=status.HTTP_200_OK)
 def get_project(
     project_id: int,
@@ -454,7 +516,22 @@ def get_projects(
     organization_id: str = Query(None, description="Filter by organization ID"),
     organization_type: str = Query(None, description="Filter by organization type"),
     status: str = Query(None, description="Filter by project status (draft, pending_validation, active, funding_completed, closed, rejected)"),
+    state: str = Query(None, description="Filter by state"),
     user_id: str = Query(None, description="User ID to determine if projects are favorited by this user"),
+    search: str = Query(None, description="Search by project reference ID"),
+    states: str = Query(None, description="Filter by state name"),
+    categories: str = Query(None, description="Filter by project category"),
+    project_stage: str = Query(None, description="Filter by project stage (planning, initiated, in_progress)"),
+    municipality_credit_rating: str = Query(None, description="Filter by credit rating"),
+    funding_type: str = Query(None, description="Filter by funding type"),
+    mode_of_implementation: str = Query(None, description="Filter by implementation mode"),
+    ownership: str = Query(None, description="Filter by ownership type"),
+    min_funding_requirement: Optional[Decimal] = Query(None, description="Minimum funding requirement (in rupees)"),
+    max_funding_requirement: Optional[Decimal] = Query(None, description="Maximum funding requirement (in rupees)"),
+    min_commitment_gap: Optional[Decimal] = Query(None, description="Minimum commitment gap (in rupees)"),
+    max_commitment_gap: Optional[Decimal] = Query(None, description="Maximum commitment gap (in rupees)"),
+    min_total_project_cost: Optional[Decimal] = Query(None, description="Minimum project cost (in rupees)"),
+    max_total_project_cost: Optional[Decimal] = Query(None, description="Maximum project cost (in rupees)"),
     db: Session = Depends(get_db)
 ):
     """Get list of projects with optional filters and pagination. Projects are returned ordered by most recent first (created_at desc)."""
@@ -466,7 +543,22 @@ def get_projects(
             organization_id=organization_id,
             organization_type=organization_type,
             status=status,
-            user_id=user_id
+            state=state,
+            user_id=user_id,
+            search=search,
+            states=states,
+            categories=categories,
+            project_stage=project_stage,
+            municipality_credit_rating=municipality_credit_rating,
+            funding_type=funding_type,
+            mode_of_implementation=mode_of_implementation,
+            ownership=ownership,
+            min_funding_requirement=min_funding_requirement,
+            max_funding_requirement=max_funding_requirement,
+            min_commitment_gap=min_commitment_gap,
+            max_commitment_gap=max_commitment_gap,
+            min_total_project_cost=min_total_project_cost,
+            max_total_project_cost=max_total_project_cost
         )
         # Convert SQLAlchemy models to Pydantic schemas
         projects_response = [ProjectResponse.model_validate(project) for project in projects]
