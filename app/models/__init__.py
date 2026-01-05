@@ -22,6 +22,7 @@ from app.models.perdix_user_detail import PerdixUserDetail
 from app.models.perdix_file import PerdixFile
 from app.models.perdix_org_detail import PerdixOrgDetail
 from app.models.state_municipality_mapping import StateMunicipalityMapping
+from app.models.fee_category_exemption import FeeCategoryExemption
 
 # Export all models for convenience
 __all__ = [
@@ -43,4 +44,5 @@ __all__ = [
     "PerdixFile",
     "PerdixOrgDetail",
     "StateMunicipalityMapping",
+    "FeeCategoryExemption",
 ]
