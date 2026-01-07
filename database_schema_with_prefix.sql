@@ -32,6 +32,19 @@ CREATE TABLE perdix_mp_roles_master (
     UNIQUE (role_name)
 );
 
+-- State-Municipality Mapping
+CREATE TABLE perdix_mp_state_municipality_mapping (
+    id BIGSERIAL PRIMARY KEY,
+    state VARCHAR(255) NOT NULL,
+    municipality VARCHAR(500) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255)
+);
+
+CREATE INDEX idx_perdix_mp_state_municipality_mapping_state ON perdix_mp_state_municipality_mapping(state);
+
 
 -- Users
 CREATE TABLE perdix_mp_users_details (
@@ -165,31 +178,36 @@ CREATE TABLE perdix_mp_access_tokens (
 -- Fee Configurations (Per Organization)
 CREATE TABLE perdix_mp_fee_configurations (
     id BIGSERIAL PRIMARY KEY,
-    orgnanisation_type VARCHAR(255) NOT NULL ,
+    organization_type VARCHAR(255) NOT NULL CHECK (organization_type IN ('Lender', 'Municipality', 'Admin', 'Govt', 'NIUA')),
+    organization_id VARCHAR(255) NOT NULL,
     
     -- Subscription Fee (Annual)
     subscription_fee_annual DECIMAL(10, 2) DEFAULT 0,
     subscription_fee_currency VARCHAR(10) DEFAULT 'INR',
     is_subscription_applicable BOOLEAN DEFAULT TRUE,
+    subscription_period_months INT DEFAULT 12, -- For flexibility (12 = annual)
     
-    -- Listing Fee (% of project funding, on success)
-    listing_fee_percentage DECIMAL(5, 2) DEFAULT 0, -- e.g., 2.5%
+    -- Listing Fee (% of project funding, payable on posting)
+    listing_fee_percentage DECIMAL(5, 2) DEFAULT 0 CHECK (listing_fee_percentage >= 0 AND listing_fee_percentage <= 100), -- e.g., 2.5%
     listing_fee_fixed DECIMAL(10, 2) DEFAULT 0,
     is_listing_fee_applicable BOOLEAN DEFAULT TRUE,
-    is_listing_fee_on_success_only BOOLEAN DEFAULT TRUE,
+    is_listing_fee_payable_on_posting BOOLEAN DEFAULT TRUE, -- Payable on project posting (not dependent on success)
     
-    -- Commitment Fee 
+    -- Commitment Fee (Future use)
     commitment_fee_percentage DECIMAL(5, 2) DEFAULT 0,
     commitment_fee_fixed DECIMAL(10, 2) DEFAULT 0,
     is_commitment_fee_applicable BOOLEAN DEFAULT FALSE,
     
-    -- Success Fee (Exploratory)
-    success_fee_percentage DECIMAL(5, 2) DEFAULT 0,
+    -- Success Fee (Municipalities - on project closure/sanction)
+    success_fee_percentage DECIMAL(5, 2) DEFAULT 0 CHECK (success_fee_percentage >= 0 AND success_fee_percentage <= 100), -- Typically 0.5-1%
     success_fee_fixed DECIMAL(10, 2) DEFAULT 0,
     is_success_fee_applicable BOOLEAN DEFAULT FALSE,
+    is_success_fee_adjusted_against_listing_fee BOOLEAN DEFAULT FALSE, -- Netting logic: Success Fee - Listing Fee (if already paid)
     
-    -- Exemptions
-    is_fee_exempt BOOLEAN DEFAULT FALSE, -- For Govt/NIUA invited users
+    -- Granular Exemptions (replaces single is_fee_exempt)
+    is_subscription_exempt BOOLEAN DEFAULT FALSE, -- For Admins and Govt/NIUA invited users
+    is_listing_fee_exempt BOOLEAN DEFAULT FALSE, -- For Govt/NIUA invited users
+    is_success_fee_exempt BOOLEAN DEFAULT FALSE, -- For specific exemptions
     exemption_reason TEXT,
     
     is_active BOOLEAN DEFAULT TRUE,
@@ -197,7 +215,33 @@ CREATE TABLE perdix_mp_fee_configurations (
     created_by VARCHAR(255),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_by VARCHAR(255),
-    UNIQUE (organization_type)
+    UNIQUE (organization_id)
+);
+
+-- Fee Category Exemptions (Category-level fee exemptions/overrides)
+CREATE TABLE perdix_mp_fee_category_exemptions (
+    id BIGSERIAL PRIMARY KEY,
+    organization_id VARCHAR(255) NOT NULL,
+    project_category VARCHAR(100) NOT NULL, -- References project category (e.g., 'Infrastructure', 'Sanitation', 'Water Supply')
+    
+    -- Fee Exemptions
+    is_listing_fee_exempt BOOLEAN DEFAULT FALSE, -- Exempt from listing fee (e.g., promotional categories, sponsored projects)
+    is_success_fee_exempt BOOLEAN DEFAULT FALSE, -- Exempt from success fee
+    
+    -- Override Values (if not exempt, can override default percentage/fixed amounts)
+    listing_fee_percentage_override DECIMAL(5, 2), -- Override listing fee percentage (NULL = use default from fee_configurations)
+    listing_fee_fixed_override DECIMAL(10, 2), -- Override listing fee fixed amount (NULL = use default)
+    success_fee_percentage_override DECIMAL(5, 2), -- Override success fee percentage (NULL = use default)
+    success_fee_fixed_override DECIMAL(10, 2), -- Override success fee fixed amount (NULL = use default)
+    
+    exemption_reason TEXT, -- Reason for exemption/override (e.g., 'Promotional category', 'Sponsored project')
+    
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(255),
+    UNIQUE (organization_id, project_category)
 );
 
 -- Fee Transactions (All fee payments)
@@ -717,7 +761,15 @@ CREATE INDEX idx_perdix_mp_refresh_tokens_expires_at ON perdix_mp_refresh_tokens
 
 -- Fee Configurations
 CREATE INDEX idx_perdix_mp_fee_configurations_organization_id ON perdix_mp_fee_configurations(organization_id);
-CREATE INDEX idx_perdix_mp_fee_configurations_is_fee_exempt ON perdix_mp_fee_configurations(is_fee_exempt) WHERE is_fee_exempt = TRUE;
+CREATE INDEX idx_perdix_mp_fee_configurations_organization_type ON perdix_mp_fee_configurations(organization_type);
+CREATE INDEX idx_perdix_mp_fee_configurations_subscription_exempt ON perdix_mp_fee_configurations(is_subscription_exempt) WHERE is_subscription_exempt = TRUE;
+CREATE INDEX idx_perdix_mp_fee_configurations_listing_fee_exempt ON perdix_mp_fee_configurations(is_listing_fee_exempt) WHERE is_listing_fee_exempt = TRUE;
+
+-- Fee Category Exemptions
+CREATE INDEX idx_perdix_mp_fee_category_exemptions_organization_id ON perdix_mp_fee_category_exemptions(organization_id);
+CREATE INDEX idx_perdix_mp_fee_category_exemptions_category ON perdix_mp_fee_category_exemptions(project_category);
+CREATE INDEX idx_perdix_mp_fee_category_exemptions_listing_exempt ON perdix_mp_fee_category_exemptions(is_listing_fee_exempt) WHERE is_listing_fee_exempt = TRUE;
+CREATE INDEX idx_perdix_mp_fee_category_exemptions_success_exempt ON perdix_mp_fee_category_exemptions(is_success_fee_exempt) WHERE is_success_fee_exempt = TRUE;
 
 -- Fee Transactions
 CREATE INDEX idx_perdix_mp_fee_transactions_organization_id ON perdix_mp_fee_transactions(organization_id);
@@ -884,7 +936,9 @@ CREATE TRIGGER update_organizations_updated_at BEFORE UPDATE ON perdix_mp_organi
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON perdix_mp_users FOR EACH ROW EXECUTE FUNCTION perdix_mp_update_updated_at_column();
 CREATE TRIGGER update_roles_updated_at BEFORE UPDATE ON perdix_mp_roles FOR EACH ROW EXECUTE FUNCTION perdix_mp_update_updated_at_column();
 CREATE TRIGGER update_invites_updated_at BEFORE UPDATE ON perdix_mp_invites FOR EACH ROW EXECUTE FUNCTION perdix_mp_update_updated_at_column();
+CREATE TRIGGER update_state_municipality_mapping_updated_at BEFORE UPDATE ON perdix_mp_state_municipality_mapping FOR EACH ROW EXECUTE FUNCTION perdix_mp_update_updated_at_column();
 CREATE TRIGGER update_fee_configurations_updated_at BEFORE UPDATE ON perdix_mp_fee_configurations FOR EACH ROW EXECUTE FUNCTION perdix_mp_update_updated_at_column();
+CREATE TRIGGER update_fee_category_exemptions_updated_at BEFORE UPDATE ON perdix_mp_fee_category_exemptions FOR EACH ROW EXECUTE FUNCTION perdix_mp_update_updated_at_column();
 CREATE TRIGGER update_fee_transactions_updated_at BEFORE UPDATE ON perdix_mp_fee_transactions FOR EACH ROW EXECUTE FUNCTION perdix_mp_update_updated_at_column();
 CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON perdix_mp_projects FOR EACH ROW EXECUTE FUNCTION perdix_mp_update_updated_at_column();
 CREATE TRIGGER update_commitments_updated_at BEFORE UPDATE ON perdix_mp_commitments FOR EACH ROW EXECUTE FUNCTION perdix_mp_update_updated_at_column();
@@ -1004,6 +1058,7 @@ COMMENT ON TABLE perdix_mp_roles IS 'RBAC roles with permission sets';
 COMMENT ON TABLE perdix_mp_otps IS 'One-time passwords for verification flows (expires in 5 minutes)';
 COMMENT ON TABLE perdix_mp_invites IS 'Invitation tokens for user onboarding (Phase 1: invitation-only)';
 COMMENT ON TABLE perdix_mp_fee_configurations IS 'Fee structure per organization (subscription, listing, commitment, success fees)';
+COMMENT ON TABLE perdix_mp_fee_category_exemptions IS 'Category-level fee exemptions and overrides (e.g., promotional categories, sponsored projects)';
 COMMENT ON TABLE perdix_mp_fee_transactions IS 'All fee payment transactions (online via Razorpay or offline)';
 COMMENT ON TABLE perdix_mp_subscription_renewals IS 'Subscription renewal tracking with reminder flags (T-30, T-7, T-1 days)';
 COMMENT ON TABLE perdix_mp_projects IS 'Municipal infrastructure projects seeking funding';

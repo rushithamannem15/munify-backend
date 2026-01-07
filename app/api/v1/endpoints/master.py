@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, status
+from typing import Optional
+from fastapi import APIRouter, Depends, status, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -6,7 +7,9 @@ from app.services.master_service import fetch_roles_from_perdix, MasterService
 from app.schemas.master import (
     ProjectCategoryMasterResponse, 
     ProjectStageMasterResponse, 
-    MasterListResponse
+    MasterListResponse,
+    StateResponse,
+    MunicipalityResponse
 )
 
 
@@ -77,3 +80,46 @@ def get_ownerships(db: Session = Depends(get_db)):
         "message": "Ownership types fetched successfully",
         "data": ownerships
     }
+
+
+@router.get("/states", response_model=MasterListResponse, status_code=status.HTTP_200_OK)
+def get_states(db: Session = Depends(get_db)):
+    """Get distinct states from state-municipality mapping table"""
+    service = MasterService(db)
+    states = service.get_distinct_states()
+    return {
+        "status": "success",
+        "message": "States fetched successfully",
+        "data": states
+    }
+
+
+@router.get("/municipalities", response_model=MasterListResponse, status_code=status.HTTP_200_OK)
+def get_municipalities_by_state(
+    state: Optional[str] = Query(None, description="The state name to filter municipalities (optional - if not provided, returns all state-municipality mappings)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get municipalities for a given state or all state-municipality mappings.
+    
+    Query parameter:
+    - state: (Optional) The state name to filter municipalities. If not provided, returns all state-municipality mappings.
+    """
+    service = MasterService(db)
+    
+    if state:
+        # Return municipalities for specific state
+        municipalities = service.get_municipalities_by_state(state)
+        return {
+            "status": "success",
+            "message": f"Municipalities for {state} fetched successfully",
+            "data": municipalities
+        }
+    else:
+        # Return all state-municipality mappings
+        all_mappings = service.get_all_state_municipality_mappings()
+        return {
+            "status": "success",
+            "message": "All state-municipality mappings fetched successfully",
+            "data": all_mappings
+        }

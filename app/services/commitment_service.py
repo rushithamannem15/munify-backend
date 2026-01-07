@@ -14,6 +14,8 @@ from app.schemas.commitment import (
     CommitmentCreate,
     CommitmentUpdate,
 )
+from app.services.commitment_document_service import CommitmentDocumentService
+from app.schemas.commitment import CommitmentResponse
 
 
 logger = get_logger("services.commitment")
@@ -67,6 +69,78 @@ class CommitmentService:
                 detail=f"Commitment with ID {commitment_id} not found",
             )
         return commitment
+    
+    def get_commitment_with_documents(self, commitment_id: int) -> dict:
+        """
+        Get commitment by ID with associated documents and file details.
+        
+        This method joins perdix_mp_commitment_documents and perdix_mp_files tables
+        to return complete file information for all documents linked to the commitment.
+        
+        Args:
+            commitment_id: Commitment ID
+            
+        Returns:
+            Dictionary containing commitment data and documents with file details
+        """
+        
+        
+        # Get commitment
+        commitment = self._get_commitment_or_404(commitment_id)
+        
+        # Get documents with file details using CommitmentDocumentService
+        documents_data = []
+        document_service = CommitmentDocumentService(self.db)
+        documents = document_service.get_commitment_documents(
+            commitment_id=commitment_id
+        )
+        
+        # Build documents response with file details
+        for doc in documents:
+            doc_dict = {
+                "id": doc.id,
+                "commitment_id": doc.commitment_id,
+                "file_id": doc.file_id,
+                "document_type": doc.document_type,
+                "is_required": doc.is_required,
+                "uploaded_by": doc.uploaded_by,
+                "created_at": doc.created_at,
+                "created_by": doc.created_by,
+                "updated_at": doc.updated_at,
+                "updated_by": doc.updated_by,
+            }
+            
+            # Include file details from perdix_mp_files if available
+            if doc.file:
+                file_dict = {
+                    "id": doc.file.id,
+                    "organization_id": doc.file.organization_id,
+                    "uploaded_by": doc.file.uploaded_by,
+                    "filename": doc.file.filename,
+                    "original_filename": doc.file.original_filename,
+                    "mime_type": doc.file.mime_type,
+                    "file_size": doc.file.file_size,
+                    "storage_path": doc.file.storage_path,
+                    "checksum": doc.file.checksum,
+                    "access_level": doc.file.access_level,
+                    "download_count": doc.file.download_count,
+                    "is_deleted": doc.file.is_deleted,
+                    "deleted_at": doc.file.deleted_at,
+                    "created_at": doc.file.created_at,
+                    "created_by": doc.file.created_by,
+                    "updated_at": doc.file.updated_at,
+                    "updated_by": doc.file.updated_by,
+                }
+                doc_dict["file"] = file_dict
+            
+            documents_data.append(doc_dict)
+        
+        # Convert commitment to dict using schema (includes all fields)
+        commitment_dict = CommitmentResponse.model_validate(commitment).model_dump()
+        # Add documents with file details to the commitment dict
+        commitment_dict["documents"] = documents_data
+        
+        return commitment_dict
 
     def _validate_status_value(self, status_value: str):
         if status_value not in VALID_STATUSES:
