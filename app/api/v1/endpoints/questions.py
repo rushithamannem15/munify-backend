@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from typing import Optional, List, Union
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Form, File, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.auth import get_current_user, CurrentUser
 from app.schemas.question import (
     QuestionCreate,
     QuestionUpdate,
-    QuestionAnswerCreate,
     QuestionResponse,
     QuestionListResponse,
 )
@@ -14,14 +15,33 @@ from app.services.question_service import QuestionService
 router = APIRouter()
 
 
+def _normalize_files(files: Union[UploadFile, List[UploadFile], None]) -> Optional[List[UploadFile]]:
+    """Normalize files parameter to always be a list or None."""
+    if files is None:
+        return None
+    # Check if it's not a list/sequence (but not a string)
+    # This handles both single UploadFile and list of UploadFiles
+    if not isinstance(files, (list, tuple)):
+        return [files]
+    # Ensure it's a list (not tuple)
+    return list(files) if isinstance(files, tuple) else files
+
+
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
-def create_question(question_data: QuestionCreate, db: Session = Depends(get_db)):
+def create_question(
+    question_data: QuestionCreate,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Create a new question for a project.
+    
+    User is automatically extracted from JWT token in Authorization header
+    or from user_id header (fallback for backward compatibility).
     """
     try:
         service = QuestionService(db)
-        question = service.create_question(question_data)
+        question = service.create_question(question_data, user_id=current_user.user_id)
         question_response = QuestionResponse.model_validate(question)
         return {
             "status": "success",
@@ -49,6 +69,7 @@ def list_questions(
     priority: str | None = Query(None, description="Filter by priority"),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(50, ge=1, le=1000, description="Maximum number of records"),
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -103,6 +124,9 @@ def get_question(
 ):
     """
     Get a single question (and its answer, if any) for a given project.
+    
+    The response includes all documents associated with the answer (if any).
+    Each document includes full file metadata.
     """
     try:
         service = QuestionService(db)
@@ -129,6 +153,7 @@ def update_question(
     question_id: int,
     question_data: QuestionUpdate,
     project_id: str = Query(..., description="Project reference ID this question belongs to"),
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -137,7 +162,7 @@ def update_question(
     try:
         service = QuestionService(db)
         question = service.update_question(
-            project_id=project_id, question_id=question_id, data=question_data
+            project_id=project_id, question_id=question_id, data=question_data, user_id=current_user.user_id
         )
         question_response = QuestionResponse.model_validate(question)
         return {
@@ -159,23 +184,39 @@ def update_question(
 )
 def answer_question(
     question_id: int,
-    answer_data: QuestionAnswerCreate,
+    reply_text: str = Form(..., description="Answer text provided by municipality"),
     project_id: str = Query(..., description="Project reference ID this question belongs to"),
-    replied_by_user_id: str = Query(
-        ..., description="User identifier (username or user ID) of the municipality user providing the answer"
-    ),
+    organization_id: Optional[str] = Query(None, description="Organization ID (auto-fetched from project if not provided and files are uploaded)"),
+    files: Union[UploadFile, List[UploadFile], None] = File(None, description="Optional file(s) to upload (single file or list)"),
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Answer a question. Enforces a single answer per question.
+    
+    **User Identification:**
+    - User is automatically extracted from JWT token in Authorization header
+    - Falls back to user_id header for backward compatibility
+    
+    **Document Upload:**
+    - Documents are optional
+    - If provided, documents are saved to: Additional/{project_reference_id}/QandA/{question_reply_id}/
+    - organization_id is automatically fetched from project if not provided and files are uploaded
+    - Can accept a single file or a list of files
     """
     try:
+        # Normalize files to always be a list or None
+        normalized_files = _normalize_files(files)
+        
+        
         service = QuestionService(db)
         question = service.answer_question(
             project_id=project_id,
             question_id=question_id,
-            replied_by_user_id=replied_by_user_id,
-            data=answer_data,
+            replied_by_user_id=current_user.user_id,  # ✅ From auth context
+            reply_text=reply_text,
+            organization_id=organization_id,
+            files=normalized_files,
         )
         question_response = QuestionResponse.model_validate(question)
         return {
@@ -197,23 +238,41 @@ def answer_question(
 )
 def update_answer(
     question_id: int,
-    answer_data: QuestionAnswerCreate,
+    reply_text: str = Form(..., description="Updated answer text provided by municipality"),
     project_id: str = Query(..., description="Project reference ID this question belongs to"),
-    replied_by_user_id: str = Query(
-        ..., description="User identifier (username or user ID) of the municipality user updating the answer"
-    ),
+    organization_id: Optional[str] = Query(None, description="Organization ID (auto-fetched from project if not provided and files are uploaded)"),
+    files: Union[UploadFile, List[UploadFile], None] = File(None, description="Optional file(s) to upload (replaces existing documents, single file or list)"),
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Update an existing answer for a question.
+    
+    **User Identification:**
+    - User is automatically extracted from JWT token in Authorization header
+    - Falls back to user_id header for backward compatibility
+    
+    **Document Update:**
+    - Documents are optional
+    - If files are provided, existing documents are deleted and replaced with new ones
+    - If files is None (not provided), existing documents remain unchanged
+    - If files is an empty list, all existing documents are removed
+    - organization_id is automatically fetched from project if not provided and files are uploaded
+    - Can accept a single file or a list of files
+    - Documents are saved to: Additional/{project_reference_id}/QandA/{question_reply_id}/
     """
     try:
+        # Normalize files to always be a list or None
+        normalized_files = _normalize_files(files)
+        
         service = QuestionService(db)
         question = service.update_answer(
             project_id=project_id,
             question_id=question_id,
-            replied_by_user_id=replied_by_user_id,
-            data=answer_data,
+            replied_by_user_id=current_user.user_id,  # ✅ From auth context
+            reply_text=reply_text,
+            organization_id=organization_id,
+            files=normalized_files,
         )
         question_response = QuestionResponse.model_validate(question)
         return {
@@ -236,13 +295,16 @@ def update_answer(
 def delete_question(
     question_id: int,
     project_id: str = Query(..., description="Project reference ID this question belongs to"),
-    requested_by: str = Query(
-        ..., description="Identifier of the user requesting deletion (must match asked_by)"
-    ),
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Delete a question written by the same person.
+
+    **User Identification:**
+    - User is automatically extracted from JWT token in Authorization header
+    - Falls back to user_id header for backward compatibility
+    - Only the user who created the question can delete it
 
     If the question has an answer, it is also deleted automatically
     via cascade.
@@ -252,7 +314,7 @@ def delete_question(
         service.delete_question(
             project_id=project_id,
             question_id=question_id,
-            requested_by=requested_by,
+            requested_by=current_user.user_id,  # ✅ From auth context
         )
         return {
             "status": "success",
@@ -273,13 +335,15 @@ def delete_question(
 def delete_answer(
     question_id: int,
     project_id: str = Query(..., description="Project reference ID this question belongs to"),
-    replied_by_user_id: str = Query(
-        ..., description="User identifier (username or user ID) of the municipality user deleting the answer"
-    ),
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Delete the answer for a question.
+
+    **User Identification:**
+    - User is automatically extracted from JWT token in Authorization header
+    - Falls back to user_id header for backward compatibility
 
     After deletion, the question status is set back to 'open'.
     """
@@ -288,7 +352,7 @@ def delete_answer(
         question = service.delete_answer(
             project_id=project_id,
             question_id=question_id,
-            replied_by_user_id=replied_by_user_id,
+            replied_by_user_id=current_user.user_id,  # ✅ From auth context
         )
         question_response = QuestionResponse.model_validate(question)
         return {

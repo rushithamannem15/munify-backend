@@ -220,18 +220,11 @@ CREATE TABLE perdix_mp_fee_configurations (
 -- Fee Category Exemptions (Category-level fee exemptions/overrides)
 CREATE TABLE perdix_mp_fee_category_exemptions (
     id BIGSERIAL PRIMARY KEY,
-    organization_id VARCHAR(255) NOT NULL,
     project_category VARCHAR(100) NOT NULL, -- References project category (e.g., 'Infrastructure', 'Sanitation', 'Water Supply')
     
     -- Fee Exemptions
     is_listing_fee_exempt BOOLEAN DEFAULT FALSE, -- Exempt from listing fee (e.g., promotional categories, sponsored projects)
     is_success_fee_exempt BOOLEAN DEFAULT FALSE, -- Exempt from success fee
-    
-    -- Override Values (if not exempt, can override default percentage/fixed amounts)
-    listing_fee_percentage_override DECIMAL(5, 2), -- Override listing fee percentage (NULL = use default from fee_configurations)
-    listing_fee_fixed_override DECIMAL(10, 2), -- Override listing fee fixed amount (NULL = use default)
-    success_fee_percentage_override DECIMAL(5, 2), -- Override success fee percentage (NULL = use default)
-    success_fee_fixed_override DECIMAL(10, 2), -- Override success fee fixed amount (NULL = use default)
     
     exemption_reason TEXT, -- Reason for exemption/override (e.g., 'Promotional category', 'Sponsored project')
     
@@ -240,7 +233,7 @@ CREATE TABLE perdix_mp_fee_category_exemptions (
     created_by VARCHAR(255),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_by VARCHAR(255),
-    UNIQUE (organization_id, project_category)
+    UNIQUE (project_category)
 );
 
 -- Fee Transactions (All fee payments)

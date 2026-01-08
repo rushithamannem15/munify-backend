@@ -32,6 +32,7 @@ class AdditionalDocumentType(str, Enum):
     """Additional document types"""
     COMMITMENT = "commitment"
     REQUESTED_DOCUMENT = "Requested document"
+    QANDA = "QandA"
 
 
 class PathBuilder:
@@ -86,22 +87,27 @@ class PathBuilder:
         org_id: str,
         project_reference_id: str,
         document_type: AdditionalDocumentType,
-        filename: str
+        filename: str,
+        question_reply_id: Optional[int] = None
     ) -> str:
         """
         Build path for additional documents.
         
         Structure: {org_id}/Additional/{project_reference_id}/{document_type}/{filename}
+        For QandA: {org_id}/Additional/{project_reference_id}/QandA/{question_reply_id}/{filename}
         
         Args:
             org_id: Organization ID
             project_reference_id: Project reference ID
             document_type: Additional document type
             filename: Generated filename
+            question_reply_id: Optional Question Reply ID (for QandA documents)
             
         Returns:
             S3 path string
         """
+        if document_type == AdditionalDocumentType.QANDA and question_reply_id is not None:
+            return f"{org_id}/Additional/{project_reference_id}/{document_type.value}/{question_reply_id}/{filename}"
         return f"{org_id}/Additional/{project_reference_id}/{document_type.value}/{filename}"
     
     @staticmethod

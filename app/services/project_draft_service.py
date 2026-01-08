@@ -501,7 +501,9 @@ class ProjectDraftService:
                     fundraising_end_date=draft.fundraising_end_date,
                     municipality_credit_rating=draft.municipality_credit_rating,
                     municipality_credit_score=draft.municipality_credit_score,
-                    status='pending_validation',  # Set status for submitted project
+                    # Admin-submitted drafts are auto-approved (status='active')
+                    # Municipality-submitted drafts require approval (status='pending_validation')
+                    status='active' if (draft.organization_type and draft.organization_type.lower() == 'munify') else 'pending_validation',
                     visibility=draft.visibility or 'private',
                     approved_by=draft.approved_by,
                     admin_notes=draft.admin_notes,
@@ -569,7 +571,8 @@ class ProjectDraftService:
                 
                 project = project_service.create_project(
                     project_data, 
-                    project_reference_id=draft.project_reference_id
+                    project_reference_id=draft.project_reference_id,
+                    user_id=user_id
                 )
                 logger.info(f"Project {project.id} created successfully from draft {draft_id} with project_reference_id {draft.project_reference_id}")
             except HTTPException as e:

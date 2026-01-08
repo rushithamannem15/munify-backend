@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.auth import get_current_user, CurrentUser
 from app.services.file_service import FileService
 from app.schemas.file import (
     FileUploadRequest,
@@ -38,7 +39,7 @@ def upload_file(
     project_reference_id: Optional[str] = Form(None, description="Project reference ID (required for Project/Additional)"),
     access_level: str = Form("private", description="Access level: public, restricted, or private"),
     db: Session = Depends(get_db),
-    uploaded_by: Optional[str] = Header(None, alias="X-User-Id", description="User ID who uploaded the file")
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """
     Upload a file to S3 storage.
@@ -62,12 +63,6 @@ def upload_file(
     **Note**: project_reference_id is required for Project and Additional categories.
     """
     try:
-        if not uploaded_by:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User ID is required"
-            )
-        
         # Validate project_reference_id for Project/Additional categories
         if file_category in ["Project", "Additional"] and not project_reference_id:
             raise HTTPException(
@@ -93,12 +88,12 @@ def upload_file(
         file_record = file_service.upload_file(
             file=file,
             organization_id=organization_id,
-            uploaded_by=uploaded_by,
+            uploaded_by=current_user.user_id,
             file_category=file_category,
             document_type=document_type,
             access_level=access_level,
             project_reference_id=project_reference_id,
-            created_by=uploaded_by
+            created_by=current_user.user_id
         )
         
         file_response = FileResponse.model_validate(file_record)
@@ -199,7 +194,7 @@ def download_file(
 def delete_file(
     file_id: int,
     db: Session = Depends(get_db),
-    user_id: Optional[str] = Header(None, alias="X-User-Id")
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """
     Soft delete a file (marks as deleted, doesn't remove from storage).
@@ -207,14 +202,8 @@ def delete_file(
     Only the file uploader or organization admin can delete files.
     """
     try:
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User ID is required"
-            )
-        
         file_service = FileService(db)
-        file_service.delete_file(file_id, user_id)
+        file_service.delete_file(file_id, current_user.user_id)
         
         return FileDeleteResponse(
             status="success",
@@ -236,7 +225,7 @@ def update_access_level(
     file_id: int,
     access_data: FileAccessUpdate,
     db: Session = Depends(get_db),
-    user_id: Optional[str] = Header(None, alias="X-User-Id")
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """
     Update file access level.
@@ -244,17 +233,11 @@ def update_access_level(
     Only the file uploader or organization admin can update access level.
     """
     try:
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User ID is required"
-            )
-        
         file_service = FileService(db)
         file_record = file_service.update_access_level(
             file_id=file_id,
             access_level=access_data.access_level,
-            user_id=user_id
+            user_id=current_user.user_id
         )
         
         file_response = FileResponse.model_validate(file_record)

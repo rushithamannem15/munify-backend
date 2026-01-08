@@ -28,7 +28,7 @@ class ProjectNoteService:
             )
         return project
 
-    def create_project_note(self, note_data: ProjectNoteCreate) -> ProjectNote:
+    def create_project_note(self, note_data: ProjectNoteCreate, user_id: str = None) -> ProjectNote:
         """Create a new project note"""
         logger.info(
             f"Creating project note for project {note_data.project_reference_id}, org {note_data.organization_id}"
@@ -39,6 +39,10 @@ class ProjectNoteService:
             self._validate_project_exists(note_data.project_reference_id)
 
             note_dict = note_data.model_dump(exclude_unset=True)
+            # Set created_by from auth context if provided
+            if user_id:
+                note_dict['created_by'] = user_id
+            
             note = ProjectNote(**note_dict)
             self.db.add(note)
             self.db.commit()

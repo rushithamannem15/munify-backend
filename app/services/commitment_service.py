@@ -194,17 +194,24 @@ class CommitmentService:
 
     # ------------- Public methods -------------
 
-    def create_commitment(self, payload: CommitmentCreate) -> Commitment:
+    def create_commitment(self, payload: CommitmentCreate, user_id: str = None) -> Commitment:
         """Create a new commitment for a project. Initial status: under_review."""
         logger.info(
             "Creating commitment for project %s by %s",
             payload.project_reference_id,
-            payload.committed_by,
+            user_id or payload.committed_by,
         )
         try:
             project = self._get_project_by_reference_id(payload.project_reference_id)
 
             data = payload.model_dump(exclude_unset=True)
+
+            # Set created_by from auth context if provided
+            if user_id:
+                data['created_by'] = user_id
+                # Remove created_by from request data if it was provided (should come from auth)
+                data.pop('created_by', None)
+                data['created_by'] = user_id
 
             # Map project_reference_id -> project_id column
             project_reference_id = data.pop("project_reference_id")
@@ -236,7 +243,7 @@ class CommitmentService:
             self._create_history_snapshot(
                 commitment=commitment,
                 action="created",
-                actor=payload.created_by or payload.committed_by,
+                actor=user_id or payload.created_by or payload.committed_by,
             )
 
             self.db.commit()
@@ -257,7 +264,7 @@ class CommitmentService:
             )
 
     def update_commitment(
-        self, commitment_id: int, payload: CommitmentUpdate
+        self, commitment_id: int, payload: CommitmentUpdate, user_id: str = None
     ) -> Commitment:
         """Update commitment details while in under_review status."""
         logger.info("Updating commitment %s", commitment_id)
@@ -266,6 +273,12 @@ class CommitmentService:
             self._ensure_modifiable(commitment)
 
             update_data = payload.model_dump(exclude_unset=True)
+            
+            # Set updated_by from auth context if provided
+            if user_id:
+                commitment.updated_by = user_id
+                # Remove updated_by from request data if it was provided (should come from auth)
+                update_data.pop('updated_by', None)
 
             # Normalize numeric fields if necessary
             amount = update_data.get("amount")
@@ -282,7 +295,7 @@ class CommitmentService:
             self._create_history_snapshot(
                 commitment=commitment,
                 action="updated",
-                actor=payload.updated_by or commitment.committed_by,
+                actor=user_id or payload.updated_by or commitment.committed_by,
             )
 
             self.db.commit()
@@ -302,7 +315,7 @@ class CommitmentService:
                 detail=f"Failed to update commitment: {str(exc)}",
             )
 
-    def withdraw_commitment(self, commitment_id: int, actor: str | None) -> Commitment:
+    def withdraw_commitment(self, commitment_id: int, user_id: str | None) -> Commitment:
         """Withdraw commitment while in under_review status."""
         logger.info("Withdrawing commitment %s", commitment_id)
         try:
@@ -312,13 +325,13 @@ class CommitmentService:
             self._ensure_transition_allowed(commitment.status, "withdrawn")
             commitment.status = "withdrawn"
             commitment.updated_at = datetime.now()
-            if actor:
-                commitment.updated_by = actor
+            if user_id:
+                commitment.updated_by = user_id
 
             self._create_history_snapshot(
                 commitment=commitment,
                 action="withdrawn",
-                actor=actor or commitment.committed_by,
+                actor=user_id or commitment.committed_by,
             )
 
             self.db.commit()
@@ -341,11 +354,11 @@ class CommitmentService:
     def approve_commitment(
         self,
         commitment_id: int,
-        approved_by: str,
+        user_id: str,
         approval_notes: str | None = None,
     ) -> Commitment:
         """Approve a commitment - status: under_review -> approved."""
-        logger.info("Approving commitment %s by %s", commitment_id, approved_by)
+        logger.info("Approving commitment %s by %s", commitment_id, user_id)
         try:
             commitment = self._get_commitment_or_404(commitment_id)
 
@@ -407,22 +420,22 @@ class CommitmentService:
             
             # Update commitment status
             commitment.status = "approved"
-            commitment.approved_by = approved_by
+            commitment.approved_by = user_id
             commitment.approved_at = datetime.now()
             if approval_notes:
                 commitment.rejection_notes = approval_notes
-            commitment.updated_by = approved_by
+            commitment.updated_by = user_id
             commitment.updated_at = datetime.now()
 
             # Update project funding_raised (sum of all approved commitments including this one)
             project.funding_raised = approved_commitments_total + commitment.amount
             project.updated_at = datetime.now()
-            project.updated_by = approved_by
+            project.updated_by = user_id
 
             self._create_history_snapshot(
                 commitment=commitment,
                 action="approved",
-                actor=approved_by,
+                actor=user_id,
             )
 
             self.db.commit()
@@ -445,12 +458,12 @@ class CommitmentService:
     def reject_commitment(
         self,
         commitment_id: int,
-        approved_by: str,
+        user_id: str,
         rejection_reason: str,
         rejection_notes: str | None = None,
     ) -> Commitment:
         """Reject a commitment - status: under_review -> rejected."""
-        logger.info("Rejecting commitment %s by %s", commitment_id, approved_by)
+        logger.info("Rejecting commitment %s by %s", commitment_id, user_id)
         try:
             commitment = self._get_commitment_or_404(commitment_id)
 
@@ -463,16 +476,16 @@ class CommitmentService:
             self._ensure_transition_allowed(commitment.status, "rejected")
 
             commitment.status = "rejected"
-            commitment.approved_by = approved_by
+            commitment.approved_by = user_id
             commitment.rejection_reason = rejection_reason
             commitment.rejection_notes = rejection_notes
-            commitment.updated_by = approved_by
+            commitment.updated_by = user_id
             commitment.updated_at = datetime.now()
 
             self._create_history_snapshot(
                 commitment=commitment,
                 action="rejected",
-                actor=approved_by,
+                actor=user_id,
             )
 
             self.db.commit()
@@ -492,7 +505,7 @@ class CommitmentService:
                 detail=f"Failed to reject commitment: {str(exc)}",
             )
 
-    def mark_funded(self, commitment_id: int, actor: str | None) -> Commitment:
+    def mark_funded(self, commitment_id: int, user_id: str | None) -> Commitment:
         """Mark an approved commitment as funded."""
         logger.info("Marking commitment %s as funded", commitment_id)
         try:
@@ -506,14 +519,14 @@ class CommitmentService:
 
             self._ensure_transition_allowed(commitment.status, "funded")
             commitment.status = "funded"
-            if actor:
-                commitment.updated_by = actor
+            if user_id:
+                commitment.updated_by = user_id
             commitment.updated_at = datetime.now()
 
             self._create_history_snapshot(
                 commitment=commitment,
                 action="funded",
-                actor=actor or commitment.approved_by,
+                actor=user_id or commitment.approved_by,
             )
 
             self.db.commit()
@@ -533,7 +546,7 @@ class CommitmentService:
                 detail=f"Failed to mark commitment as funded: {str(exc)}",
             )
 
-    def mark_completed(self, commitment_id: int, actor: str | None) -> Commitment:
+    def mark_completed(self, commitment_id: int, user_id: str | None) -> Commitment:
         """Mark a funded commitment as completed."""
         logger.info("Marking commitment %s as completed", commitment_id)
         try:
@@ -547,14 +560,14 @@ class CommitmentService:
 
             self._ensure_transition_allowed(commitment.status, "completed")
             commitment.status = "completed"
-            if actor:
-                commitment.updated_by = actor
+            if user_id:
+                commitment.updated_by = user_id
             commitment.updated_at = datetime.now()
 
             self._create_history_snapshot(
                 commitment=commitment,
                 action="completed",
-                actor=actor or commitment.approved_by,
+                actor=user_id or commitment.approved_by,
             )
 
             self.db.commit()

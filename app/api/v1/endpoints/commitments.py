@@ -3,6 +3,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.auth import get_current_user, CurrentUser
 from app.schemas.commitment import (
     CommitmentCreate,
     CommitmentUpdate,
@@ -30,12 +31,13 @@ router = APIRouter()
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
 def create_commitment(
     commitment_data: CommitmentCreate,
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Create a new commitment for a project (initial status: under_review)."""
     try:
         service = CommitmentService(db)
-        commitment = service.create_commitment(commitment_data)
+        commitment = service.create_commitment(commitment_data, user_id=current_user.user_id)
         commitment_response = CommitmentResponse.model_validate(commitment)
         return {
             "status": "success",
@@ -134,12 +136,12 @@ def create_commitment_with_documents(
             interest_rate=interest_rate_decimal,
             tenure_months=tenure_months,
             terms_conditions_text=terms_conditions_text,
-            created_by=created_by or uploaded_by
+            created_by=None  # Will be set from auth context
         )
         
         # Step 1: Create commitment
         commitment_service = CommitmentService(db)
-        commitment = commitment_service.create_commitment(commitment_create)
+        commitment = commitment_service.create_commitment(commitment_create, user_id=uploaded_by)
         commitment_id = commitment.id
         
         # Step 2: Upload document (file is mandatory)
@@ -304,12 +306,13 @@ def list_commitments(
 def update_commitment(
     commitment_id: int,
     commitment_data: CommitmentUpdate,
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Update commitment details (allowed only in under_review status)."""
     try:
         service = CommitmentService(db)
-        commitment = service.update_commitment(commitment_id, commitment_data)
+        commitment = service.update_commitment(commitment_id, commitment_data, user_id=current_user.user_id)
         commitment_response = CommitmentResponse.model_validate(commitment)
         return {
             "status": "success",
@@ -333,12 +336,13 @@ def update_commitment(
 def withdraw_commitment(
     commitment_id: int,
     payload: CommitmentStatusChangeRequest,
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Withdraw a commitment (allowed only in under_review status)."""
     try:
         service = CommitmentService(db)
-        commitment = service.withdraw_commitment(commitment_id, payload.updated_by)
+        commitment = service.withdraw_commitment(commitment_id, current_user.user_id)
         commitment_response = CommitmentResponse.model_validate(commitment)
         return {
             "status": "success",
@@ -362,6 +366,7 @@ def withdraw_commitment(
 def approve_commitment(
     commitment_id: int,
     payload: CommitmentApproveRequest,
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Approve a commitment (under_review -> approved)."""
@@ -369,7 +374,7 @@ def approve_commitment(
         service = CommitmentService(db)
         commitment = service.approve_commitment(
             commitment_id=commitment_id,
-            approved_by=payload.approved_by,
+            user_id=current_user.user_id,
             approval_notes=payload.approval_notes,
         )
         commitment_response = CommitmentResponse.model_validate(commitment)
@@ -395,6 +400,7 @@ def approve_commitment(
 def reject_commitment(
     commitment_id: int,
     payload: CommitmentRejectRequest,
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Reject a commitment (under_review -> rejected)."""
@@ -402,7 +408,7 @@ def reject_commitment(
         service = CommitmentService(db)
         commitment = service.reject_commitment(
             commitment_id=commitment_id,
-            approved_by=payload.approved_by,
+            user_id=current_user.user_id,
             rejection_reason=payload.rejection_reason,
             rejection_notes=payload.rejection_notes,
         )
@@ -429,12 +435,13 @@ def reject_commitment(
 def fund_commitment(
     commitment_id: int,
     payload: CommitmentStatusChangeRequest,
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Mark a commitment as funded (approved -> funded)."""
     try:
         service = CommitmentService(db)
-        commitment = service.mark_funded(commitment_id, payload.updated_by)
+        commitment = service.mark_funded(commitment_id, current_user.user_id)
         commitment_response = CommitmentResponse.model_validate(commitment)
         return {
             "status": "success",
@@ -458,12 +465,13 @@ def fund_commitment(
 def complete_commitment(
     commitment_id: int,
     payload: CommitmentStatusChangeRequest,
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Mark a commitment as completed (funded -> completed)."""
     try:
         service = CommitmentService(db)
-        commitment = service.mark_completed(commitment_id, payload.updated_by)
+        commitment = service.mark_completed(commitment_id, current_user.user_id)
         commitment_response = CommitmentResponse.model_validate(commitment)
         return {
             "status": "success",
