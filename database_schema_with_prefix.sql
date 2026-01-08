@@ -208,7 +208,6 @@ CREATE TABLE perdix_mp_fee_configurations (
     is_subscription_exempt BOOLEAN DEFAULT FALSE, -- For Admins and Govt/NIUA invited users
     is_listing_fee_exempt BOOLEAN DEFAULT FALSE, -- For Govt/NIUA invited users
     is_success_fee_exempt BOOLEAN DEFAULT FALSE, -- For specific exemptions
-    exemption_reason TEXT,
     
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
