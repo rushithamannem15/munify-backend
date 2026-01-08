@@ -104,7 +104,7 @@ class ProjectService:
                 detail=f"Invalid visibility. Must be one of: {', '.join(valid_visibilities)}"
             )
     
-    def create_project(self, project_data: ProjectCreate, project_reference_id: Optional[str] = None) -> Project:
+    def create_project(self, project_data: ProjectCreate, project_reference_id: Optional[str] = None, user_id: Optional[str] = None) -> Project:
         """Create a new project
         
         Args:
@@ -147,13 +147,42 @@ class ProjectService:
             project_dict = project_data.model_dump(exclude_unset=True)
             project_dict['project_reference_id'] = final_project_reference_id
             
+            # Set user tracking from auth context
+            if user_id:
+                project_dict['created_by'] = user_id
+                # Remove created_by from request data if it was provided (should come from auth)
+                project_dict.pop('created_by', None)
+                project_dict['created_by'] = user_id
+            
             # Set defaults
             if 'already_secured_funds' not in project_dict or project_dict['already_secured_funds'] is None:
                 project_dict['already_secured_funds'] = Decimal('0')
             # Currency is always set by backend (ignore frontend value)
             project_dict['currency'] = 'INR'
+            
+            # Check if admin is creating project - auto-approve if so
+            is_admin = project_dict.get('organization_type', '').lower() == 'munify'
+            
             if 'status' not in project_dict or project_dict['status'] is None:
-                project_dict['status'] = 'draft'
+                # Admin-created projects are auto-approved (status='active')
+                # Municipality-created projects default to 'draft' (or 'pending_validation' if from draft submission)
+                if is_admin:
+                    project_dict['status'] = 'active'
+                    # Set approval fields for admin-created projects
+                    if user_id:
+                        project_dict['approved_by'] = user_id
+                    project_dict['approved_at'] = datetime.now()
+                    logger.info(f"Admin-created project will be auto-approved with status='active'")
+                else:
+                    project_dict['status'] = 'draft'
+            elif is_admin and project_dict.get('status') == 'pending_validation':
+                # If admin explicitly sets pending_validation, auto-approve it
+                project_dict['status'] = 'active'
+                if user_id:
+                    project_dict['approved_by'] = user_id
+                project_dict['approved_at'] = datetime.now()
+                logger.info(f"Admin-created project with pending_validation status will be auto-approved")
+            
             if 'visibility' not in project_dict or project_dict['visibility'] is None:
                 project_dict['visibility'] = 'private'
             if 'project_stage' not in project_dict or project_dict['project_stage'] is None:
@@ -166,7 +195,7 @@ class ProjectService:
             self.db.commit()
             self.db.refresh(project)
             
-            logger.info(f"Project {project.id} created successfully with reference ID: {project.project_reference_id}")
+            logger.info(f"Project {project.id} created successfully with reference ID: {project.project_reference_id}, status: {project.status}")
             return project
             
         except HTTPException:
@@ -491,7 +520,7 @@ class ProjectService:
         
         return projects, total
     
-    def update_project(self, project_id: int, project_data: ProjectUpdate) -> Project:
+    def update_project(self, project_id: int, project_data: ProjectUpdate, user_id: Optional[str] = None) -> Project:
         """Update an existing project"""
         logger.info(f"Updating project {project_id}")
         
@@ -500,6 +529,12 @@ class ProjectService:
             
             # Validate status, stage, and visibility if provided
             update_dict = project_data.model_dump(exclude_unset=True)
+            
+            # Set user tracking from auth context
+            if user_id:
+                project.updated_by = user_id
+                # Remove updated_by from request data if it was provided (should come from auth)
+                update_dict.pop('updated_by', None)
             
             # Currency is backend-controlled - remove if frontend tries to change it
             if 'currency' in update_dict:
@@ -559,9 +594,9 @@ class ProjectService:
                 detail=f"Failed to delete project: {str(e)}"
             )
     
-    def approve_project(self, project_id: int, approved_by: str, admin_notes: str = None) -> Project:
+    def approve_project(self, project_id: int, user_id: str, admin_notes: str = None) -> Project:
         """Approve a project - sets status to 'active'. Can approve projects in 'pending_validation' status (including resubmitted ones)."""
-        logger.info(f"Approving project {project_id} by {approved_by}")
+        logger.info(f"Approving project {project_id} by {user_id}")
         
         try:
             project = self.get_project_by_id(project_id)
@@ -583,14 +618,14 @@ class ProjectService:
             # Update project status and approval fields
             project.status = 'active'
             project.approved_at = datetime.now()
-            project.approved_by = approved_by
+            project.approved_by = user_id
             if admin_notes:
                 project.admin_notes = admin_notes
             
             self.db.commit()
             self.db.refresh(project)
             
-            logger.info(f"Project {project_id} approved successfully by {approved_by}. Status set to 'active'")
+            logger.info(f"Project {project_id} approved successfully by {user_id}. Status set to 'active'")
             return project
             
         except HTTPException:
@@ -604,9 +639,9 @@ class ProjectService:
                 detail=f"Failed to approve project: {str(e)}"
             )
     
-    def reject_project(self, project_id: int, reject_note: str, approved_by: str) -> Project:
+    def reject_project(self, project_id: int, reject_note: str, user_id: str) -> Project:
         """Reject a project - sets status to 'rejected' and stores reject note"""
-        logger.info(f"Rejecting project {project_id} by {approved_by}")
+        logger.info(f"Rejecting project {project_id} by {user_id}")
         
         try:
             project = self.get_project_by_id(project_id)
@@ -635,12 +670,12 @@ class ProjectService:
             # Update project status and reject note
             project.status = 'rejected'
             project.admin_notes = reject_note.strip()
-            project.approved_by = approved_by
+            project.approved_by = user_id
             
             # Create rejection history record
             rejection = ProjectRejectionHistory(
                 project_id=project_id,
-                rejected_by=approved_by,
+                rejected_by=user_id,
                 rejection_note=reject_note.strip()
             )
             self.db.add(rejection)
@@ -648,7 +683,7 @@ class ProjectService:
             self.db.commit()
             self.db.refresh(project)
             
-            logger.info(f"Project {project_id} rejected successfully by {approved_by}. Status set to 'rejected' and rejection history created")
+            logger.info(f"Project {project_id} rejected successfully by {user_id}. Status set to 'rejected' and rejection history created")
             return project
             
         except HTTPException:
@@ -662,9 +697,9 @@ class ProjectService:
                 detail=f"Failed to reject project: {str(e)}"
             )
     
-    def resubmit_project(self, project_id: int, project_data, updated_by: str = None) -> Project:
+    def resubmit_project(self, project_id: int, project_data, user_id: Optional[str] = None) -> Project:
         """Resubmit a rejected project - updates project fields and changes status from 'rejected' to 'pending_validation'"""
-        logger.info(f"Resubmitting project {project_id} by {updated_by}")
+        logger.info(f"Resubmitting project {project_id} by {user_id}")
         
         try:
             project = self.get_project_by_id(project_id)
@@ -720,6 +755,12 @@ class ProjectService:
             # Change status to pending_validation
             project.status = 'pending_validation'
             
+            # Set user tracking from auth context
+            if user_id:
+                project.updated_by = user_id
+                # Remove updated_by from request data if it was provided (should come from auth)
+                update_dict.pop('updated_by', None)
+            
             # Reset approval fields (since it's being resubmitted)
             project.approved_at = None
             # Keep approved_by for audit trail (shows who rejected it)
@@ -727,9 +768,9 @@ class ProjectService:
             # Update admin_notes with resubmission info
             resubmission_info = []
             if resubmission_notes:
-                resubmission_info.append(f"[RESUBMITTED on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} by {updated_by}]: {resubmission_notes}")
+                resubmission_info.append(f"[RESUBMITTED on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} by {user_id}]: {resubmission_notes}")
             else:
-                resubmission_info.append(f"[RESUBMITTED on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} by {updated_by}]")
+                resubmission_info.append(f"[RESUBMITTED on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} by {user_id}]")
             
             # Preserve original rejection note and append resubmission info
             if original_rejection_note:
@@ -737,9 +778,7 @@ class ProjectService:
             else:
                 project.admin_notes = "\n".join(resubmission_info)
             
-            # Update updated_by and updated_at
-            if updated_by:
-                project.updated_by = updated_by
+            # updated_by is already set above from user_id
             project.updated_at = datetime.now()
             
             # Update rejection history record
@@ -748,7 +787,7 @@ class ProjectService:
             self.db.commit()
             self.db.refresh(project)
             
-            logger.info(f"Project {project_id} resubmitted successfully by {updated_by}. Status changed from 'rejected' to 'pending_validation'")
+            logger.info(f"Project {project_id} resubmitted successfully by {user_id}. Status changed from 'rejected' to 'pending_validation'")
             return project
             
         except HTTPException:

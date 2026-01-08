@@ -56,8 +56,6 @@ class QuestionReply(Base):
     replied_by_user_id = Column(String(255), nullable=False)
 
     reply_text = Column(Text, nullable=False)
-    attachments = Column(JSON, nullable=False, server_default="[]")
-    document_links = Column(Text, nullable=True)
 
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=True)
     created_by = Column(String(255), nullable=True)
@@ -66,5 +64,10 @@ class QuestionReply(Base):
 
     # Relationships
     question = relationship("Question", back_populates="answer")
+    documents = relationship(
+        "QuestionReplyDocument",
+        back_populates="question_reply",
+        cascade="all, delete-orphan",
+    )
 
 

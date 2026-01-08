@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
+from app.core.auth import get_current_user, CurrentUser
 from app.schemas.project_favorite import ProjectFavoriteCreate, ProjectFavoriteUpdate, ProjectFavoriteResponse
 from app.services.project_favorite_service import ProjectFavoriteService
 
@@ -8,9 +9,17 @@ router = APIRouter()
 
 
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
-def create_project_favorite(favorite_data: ProjectFavoriteCreate, db: Session = Depends(get_db)):
+def create_project_favorite(
+    favorite_data: ProjectFavoriteCreate,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Create a new project favorite"""
     try:
+        # Set user_id and created_by from auth context
+        favorite_data.user_id = current_user.user_id
+        favorite_data.created_by = current_user.user_id
+        
         service = ProjectFavoriteService(db)
         favorite = service.create_project_favorite(favorite_data)
         # Convert SQLAlchemy model to Pydantic schema
@@ -33,17 +42,17 @@ def create_project_favorite(favorite_data: ProjectFavoriteCreate, db: Session = 
 
 @router.get("/", response_model=dict, status_code=status.HTTP_200_OK)
 def get_project_favorites(
-    user_id: str = Query(..., description="User ID to get favorites for"),
     organization_id: str = Query(None, description="Filter by organization ID"),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get list of project favorites for a user"""
+    """Get list of project favorites for the current user"""
     try:
         service = ProjectFavoriteService(db)
         favorites, total = service.get_favorites_by_user(
-            user_id=user_id,
+            user_id=current_user.user_id,
             organization_id=organization_id,
             skip=skip,
             limit=limit
@@ -67,20 +76,20 @@ def get_project_favorites(
 
 @router.get("/project-details", response_model=dict, status_code=status.HTTP_200_OK)
 def get_favorited_project_details(
-    user_id: str = Query(..., description="User ID to get favorited project details for"),
     organization_id: str | None = Query(None, description="Filter by organization ID"),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Get detailed project records from perdix_mp_projects for all projects
-    favorited by the given user (and optionally filtered by organization).
+    favorited by the current user (and optionally filtered by organization).
     """
     try:
         service = ProjectFavoriteService(db)
         projects, total = service.get_favorited_project_details(
-            user_id=user_id,
+            user_id=current_user.user_id,
             organization_id=organization_id,
             skip=skip,
             limit=limit,
@@ -103,13 +112,13 @@ def get_favorited_project_details(
 @router.delete("/", status_code=status.HTTP_200_OK)
 def delete_project_favorite_by_project_and_user(
     project_reference_id: str = Query(..., description="Project reference ID"),
-    user_id: str = Query(..., description="User ID"),
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Delete a project favorite by project_reference_id and user_id"""
+    """Delete a project favorite by project_reference_id for the current user"""
     try:
         service = ProjectFavoriteService(db)
-        service.delete_project_favorite_by_project_and_user(project_reference_id, user_id)
+        service.delete_project_favorite_by_project_and_user(project_reference_id, current_user.user_id)
         return {
             "status": "success",
             "message": "Project favorite deleted successfully"

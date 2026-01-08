@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from decimal import Decimal
 from typing import Optional
 from app.core.database import get_db
+from app.core.auth import get_current_user, CurrentUser
 from app.schemas.project import (
     ProjectCreate,
     ProjectUpdate,
@@ -35,7 +36,7 @@ def upload_project_file(
     access_level: str = Form("public", description="Access level: public, restricted, or private"),
     auto_create_draft: bool = Form(True, description="Auto-create draft if project_reference_id doesn't exist"),
     db: Session = Depends(get_db),
-    uploaded_by: Optional[str] = Header(None, alias="user_id", description="User ID who uploaded the file")
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """
     Upload a file for a project or draft.
@@ -61,19 +62,13 @@ def upload_project_file(
     **Note**: The file_id returned should be used by the frontend to include in project creation/update payloads.
     """
     try:
-        if not uploaded_by:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User ID is required. Please provide user_id header."
-            )
-        
         service = ProjectDocumentService(db)
         
         # If draft_id provided, get its project_reference_id
         if draft_id and not project_reference_id:
             from app.services.project_draft_service import ProjectDraftService
             draft_service = ProjectDraftService(db)
-            draft = draft_service.get_draft_by_id(draft_id, user_id=uploaded_by)
+            draft = draft_service.get_draft_by_id(draft_id, user_id=current_user.user_id)
             project_reference_id = draft.project_reference_id
             if not project_reference_id:
                 raise HTTPException(
@@ -93,7 +88,7 @@ def upload_project_file(
             file=file,
             project_reference_id=project_reference_id,
             document_type=document_type,
-            uploaded_by=uploaded_by,
+            uploaded_by=current_user.user_id,
             organization_id=organization_id,
             access_level=access_level,
             auto_create_draft=auto_create_draft
@@ -125,7 +120,7 @@ def delete_project_file(
     file_id: int,
     project_reference_id: Optional[str] = Query(None, description="Optional project reference ID for validation"),
     db: Session = Depends(get_db),
-    user_id: Optional[str] = Header(None, alias="user_id", description="User ID performing the deletion")
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """
     Delete a project file.
@@ -137,16 +132,10 @@ def delete_project_file(
     **Note**: Only the user who uploaded the file can delete it.
     """
     try:
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User ID is required. Please provide X-User-Id header."
-            )
-        
         service = ProjectDocumentService(db)
         service.delete_project_file(
             file_id=file_id,
-            user_id=user_id,
+            user_id=current_user.user_id,
             project_reference_id=project_reference_id
         )
         
@@ -240,11 +229,25 @@ def get_project_documents(
 
 
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
-def create_project(project_data: ProjectCreate, db: Session = Depends(get_db)):
-    """Create a new project"""
+def create_project(
+    project_data: ProjectCreate,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new project
+    
+    **Admin Auto-Approval:**
+    - If `organization_type` is 'admin', the project will be automatically approved
+    - Status will be set to 'active' and approval fields (approved_by, approved_at) will be set automatically
+    - No approval workflow is required for admin-created projects
+    
+    **Municipality Flow:**
+    - If `organization_type` is 'municipality' (or other non-admin types), the project will be created with status 'draft'
+    - Municipality projects should use the draft workflow: create draft → submit draft → admin approval → active
+    """
     try:
         service = ProjectService(db)
-        project = service.create_project(project_data)
+        project = service.create_project(project_data, user_id=current_user.user_id)
         # Convert SQLAlchemy model to Pydantic schema
         project_response = ProjectResponse.model_validate(project)
         return {
@@ -578,11 +581,16 @@ def get_projects(
 
 
 @router.put("/{project_id}", response_model=dict, status_code=status.HTTP_200_OK)
-def update_project(project_id: int, project_data: ProjectUpdate, db: Session = Depends(get_db)):
+def update_project(
+    project_id: int,
+    project_data: ProjectUpdate,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Update an existing project"""
     try:
         service = ProjectService(db)
-        project = service.update_project(project_id, project_data)
+        project = service.update_project(project_id, project_data, user_id=current_user.user_id)
         # Convert SQLAlchemy model to Pydantic schema
         project_response = ProjectResponse.model_validate(project)
         return {
@@ -622,6 +630,7 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
 def approve_project(
     project_id: int, 
     approve_data: ProjectApproveRequest, 
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Approve a project - sets status to 'active'"""
@@ -629,8 +638,8 @@ def approve_project(
         service = ProjectService(db)
         project = service.approve_project(
             project_id, 
-            approve_data.approved_by,
-            approve_data.admin_notes
+            user_id=current_user.user_id,
+            admin_notes=approve_data.admin_notes
         )
         project_response = ProjectResponse.model_validate(project)
         return {
@@ -651,6 +660,7 @@ def approve_project(
 def reject_project(
     project_id: int, 
     reject_data: ProjectRejectRequest, 
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Reject a project - sets status to 'rejected' and stores reject note"""
@@ -659,7 +669,7 @@ def reject_project(
         project = service.reject_project(
             project_id, 
             reject_data.reject_note, 
-            reject_data.approved_by
+            user_id=current_user.user_id
         )
         project_response = ProjectResponse.model_validate(project)
         return {
@@ -680,6 +690,7 @@ def reject_project(
 def resubmit_project(
     project_id: int,
     resubmit_data: ProjectResubmitRequest,
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Resubmit a rejected project - updates project fields and changes status from 'rejected' to 'pending_validation'"""
@@ -688,7 +699,7 @@ def resubmit_project(
         project = service.resubmit_project(
             project_id,
             resubmit_data,
-            resubmit_data.updated_by
+            user_id=current_user.user_id
         )
         project_response = ProjectResponse.model_validate(project)
         return {

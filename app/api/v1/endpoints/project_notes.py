@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.auth import get_current_user, CurrentUser
 from app.schemas.project_note import ProjectNoteCreate, ProjectNoteResponse
 from app.services.project_note_service import ProjectNoteService
 
@@ -9,11 +10,15 @@ router = APIRouter()
 
 
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
-def create_project_note(note_data: ProjectNoteCreate, db: Session = Depends(get_db)):
+def create_project_note(
+    note_data: ProjectNoteCreate,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Create a new project note"""
     try:
         service = ProjectNoteService(db)
-        note = service.create_project_note(note_data)
+        note = service.create_project_note(note_data, user_id=current_user.user_id)
         note_response = ProjectNoteResponse.model_validate(note)
         return {
             "status": "success",

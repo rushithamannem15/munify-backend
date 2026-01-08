@@ -83,11 +83,21 @@ class FileService:
         file_category: str,
         document_type: str,
         filename: str,
-        project_reference_id: Optional[str] = None
+        project_reference_id: Optional[str] = None,
+        question_reply_id: Optional[int] = None
     ) -> str:
         """Build storage path using PathBuilder"""
         try:
             category_enum = FileCategory(file_category)
+            # For Additional category with QANDA document type, use build_additional_path directly
+            if category_enum == FileCategory.ADDITIONAL and document_type == "QandA" and question_reply_id is not None:
+                return PathBuilder.build_additional_path(
+                    org_id=org_id,
+                    project_reference_id=project_reference_id,
+                    document_type=AdditionalDocumentType.QANDA,
+                    filename=filename,
+                    question_reply_id=question_reply_id
+                )
             return PathBuilder.build_path(
                 org_id=org_id,
                 file_category=category_enum,
@@ -110,6 +120,7 @@ class FileService:
         document_type: str,
         access_level: str = 'private',
         project_reference_id: Optional[str] = None,
+        question_reply_id: Optional[int] = None,
         created_by: Optional[str] = None
     ) -> PerdixFile:
         """
@@ -143,7 +154,8 @@ class FileService:
             file_category=file_category,
             document_type=document_type,
             filename=generated_filename,
-            project_reference_id=project_reference_id
+            project_reference_id=project_reference_id,
+            question_reply_id=question_reply_id
         )
         
         # Upload to storage

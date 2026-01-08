@@ -23,6 +23,8 @@ from app.models.perdix_file import PerdixFile
 from app.models.perdix_org_detail import PerdixOrgDetail
 from app.models.state_municipality_mapping import StateMunicipalityMapping
 from app.models.fee_category_exemption import FeeCategoryExemption
+from app.models.question import Question, QuestionReply
+from app.models.question_reply_document import QuestionReplyDocument
 
 # Export all models for convenience
 __all__ = [
@@ -39,6 +41,7 @@ __all__ = [
     "CommitmentDocument",
     "Question",
     "QuestionReply",
+    "QuestionReplyDocument",
     "ProjectNote",
     "PerdixUserDetail",
     "PerdixFile",
