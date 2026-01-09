@@ -535,7 +535,8 @@ def get_projects(
     max_commitment_gap: Optional[Decimal] = Query(None, description="Maximum commitment gap (in rupees)"),
     min_total_project_cost: Optional[Decimal] = Query(None, description="Minimum project cost (in rupees)"),
     max_total_project_cost: Optional[Decimal] = Query(None, description="Maximum project cost (in rupees)"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """Get list of projects with optional filters and pagination. Projects are returned ordered by most recent first (created_at desc)."""
     try:

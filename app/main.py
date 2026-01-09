@@ -4,6 +4,7 @@ from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.logging import setup_logging, get_logger
 from app.middleware.logging import RequestLoggingMiddleware
+from app.middleware.auth_interceptor import AuthInterceptorMiddleware
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -31,6 +32,38 @@ app = FastAPI(
 )
 
 # Add middleware (order matters - first added is outermost)
+# Auth interceptor should be early to validate tokens and add user headers
+app.add_middleware(
+    AuthInterceptorMiddleware,
+    skip_paths=[
+        # System endpoints
+        "/health",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+        "/",  # Root landing page (exact match only - handled in should_skip_path)
+        
+        # Landing Page APIs
+        "/api/v1/statistics/landing-page",
+        
+        # Login Page APIs
+        "/api/v1/auth/login",
+        
+        # Register Page APIs
+        "/api/v1/master/roles",
+        "/api/v1/perdix/query",
+        "/api/v1/invitations/validate",  # Matches /invitations/validate/{token}
+        "/api/v1/users/register",
+        
+        # Forgot Password Page APIs
+        "/api/v1/auth/forgot-password/otp",
+        "/api/v1/auth/change-password/otp",
+        
+        # Account endpoint (used for token validation)
+        "/api/v1/users/account",
+    ],
+    require_auth=False  # Set to True to require authentication on all endpoints
+)
 app.add_middleware(RequestLoggingMiddleware)
 
 # Set up CORS
