@@ -1,70 +1,76 @@
 import pandas as pd
 from io import BytesIO
-from typing import List, Dict, Any, Set
+from typing import List, Dict, Any, Set, Type
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, status, UploadFile
 from app.core.logging import get_logger
-from app.models.project_category_master import ProjectCategoryMaster
-from app.models.project_stage_master import ProjectStageMaster
-from app.models.funding_type_master import FundingTypeMaster
-from app.models.mode_of_implementation_master import ModeOfImplementationMaster
-from app.models.ownership_master import OwnershipMaster
-
-from app.schemas.master import (
-    ProjectCategoryMasterResponse,
-    ProjectStageMasterResponse,
-    FundingTypeMasterResponse,
-    ModeOfImplementationMasterResponse,
-    OwnershipMasterResponse,
-)
+from app.core.database import Base
+from app.models.master_table_list import MasterTableList
 
 logger = get_logger("services.master_common")
 
 
 class MasterCommonService:
-    """Service for common operations on master tables"""
+    """Service for common operations on master tables - fully dynamic based on master_table_list"""
     
     # Columns that are auto-generated or should not be set from Excel
     EXCLUDED_COLUMNS = {"id", "created_at", "updated_at"}
     
-    # Mapping of table names to their models and response schemas
-    TABLE_MAPPING = {
-        "funding_type_master": {
-            "model": FundingTypeMaster,
-            "response_schema": FundingTypeMasterResponse
-        },
-        "mode_of_implementation_master": {
-            "model": ModeOfImplementationMaster,
-            "response_schema": ModeOfImplementationMasterResponse
-        },
-        "ownership_master": {
-            "model": OwnershipMaster,
-            "response_schema": OwnershipMasterResponse
-        },
-        "project_category_master": {
-            "model": ProjectCategoryMaster,
-            "response_schema": ProjectCategoryMasterResponse
-        },
-        "project_stage_master": {
-            "model": ProjectStageMaster,
-            "response_schema": ProjectStageMasterResponse
-        }
-    }
-    
     def __init__(self, db: Session):
         self.db = db
     
-    def _validate_table_name(self, table_name: str) -> Dict[str, Any]:
-        """Validate table name and return table configuration"""
-        if table_name not in self.TABLE_MAPPING:
-            valid_tables = ", ".join(self.TABLE_MAPPING.keys())
+    def _validate_table_exists_in_list(self, table_name: str) -> None:
+        """
+        Validate that the table name exists in master_table_list.
+        
+        Args:
+            table_name: Name of the master table
+            
+        Raises:
+            HTTPException: If table name is not found in master_table_list
+        """
+        table_record = self.db.query(MasterTableList).filter(
+            MasterTableList.table_name == table_name
+        ).first()
+        
+        if not table_record:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid table name '{table_name}'. Valid tables are: {valid_tables}"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Table '{table_name}' not found in master table list. "
+                       f"Please add it to master_table_list first."
             )
-        return self.TABLE_MAPPING[table_name]
+    
+    def _get_model_by_table_name(self, table_name: str) -> Type:
+        """
+        Dynamically get model class by table name from SQLAlchemy registry.
+        
+        Args:
+            table_name: Name of the database table
+            
+        Returns:
+            SQLAlchemy model class
+            
+        Raises:
+            HTTPException: If model is not found
+        """
+        # First validate table exists in master_table_list
+        self._validate_table_exists_in_list(table_name)
+        
+        # Search through all registered models in SQLAlchemy registry
+        for mapper in Base.registry.mappers:
+            model_class = mapper.class_
+            # Check if this model's table name matches
+            if hasattr(model_class, '__tablename__') and model_class.__tablename__ == table_name:
+                return model_class
+        
+        # If not found, raise exception
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model for table '{table_name}' not found in SQLAlchemy registry. "
+                   f"Ensure the model is properly imported and registered."
+        )
     
     def _get_model_columns(self, model) -> Set[str]:
         """
@@ -82,9 +88,28 @@ class MasterCommonService:
         # Return only columns that are not excluded
         return all_columns - self.EXCLUDED_COLUMNS
     
+    def _get_required_columns(self, model) -> Set[str]:
+        """
+        Get all required (non-nullable) column names from a SQLAlchemy model dynamically.
+        Excludes auto-generated columns like id, created_at, updated_at.
+        
+        Args:
+            model: SQLAlchemy model class
+            
+        Returns:
+            Set of required column names that must be provided
+        """
+        mapper = inspect(model)
+        required_columns = {
+            column.key for column in mapper.columns 
+            if not column.nullable and column.key not in self.EXCLUDED_COLUMNS
+        }
+        return required_columns
+    
     def get_all_by_table_name(self, table_name: str) -> List[Dict[str, Any]]:
         """
         Generic method to get all records from a master table by table name.
+        Dynamically discovers the model from SQLAlchemy registry.
         
         Args:
             table_name: Name of the master table
@@ -92,13 +117,26 @@ class MasterCommonService:
         Returns:
             List of records as dictionaries
         """
-        table_config = self._validate_table_name(table_name)
-        model = table_config["model"]
-        response_schema = table_config["response_schema"]
-        
         try:
+            # Dynamically get model class
+            model = self._get_model_by_table_name(table_name)
+            
+            # Query all records
             records = self.db.query(model).order_by(model.id).all()
-            return [response_schema.model_validate(record).model_dump() for record in records]
+            
+            # Convert records to dictionaries dynamically
+            result = []
+            mapper = inspect(model)
+            for record in records:
+                record_dict = {}
+                for column in mapper.columns:
+                    record_dict[column.key] = getattr(record, column.key)
+                result.append(record_dict)
+            
+            return result
+            
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Error fetching records from {table_name}: {str(e)}")
             raise HTTPException(
@@ -116,6 +154,7 @@ class MasterCommonService:
         Bulk insert records from Excel file into the specified master table.
         Fields are read dynamically from Excel - any column in Excel that matches
         a database column will be inserted. No code changes needed when adding new columns.
+        Model is discovered dynamically from SQLAlchemy registry.
         
         Args:
             table_name: Name of the master table
@@ -125,8 +164,11 @@ class MasterCommonService:
         Returns:
             Dictionary with insertion results
         """
-        table_config = self._validate_table_name(table_name)
-        model = table_config["model"]
+        try:
+            # Dynamically get model class
+            model = self._get_model_by_table_name(table_name)
+        except HTTPException:
+            raise
         
         # Get valid database columns dynamically
         valid_db_columns = self._get_model_columns(model)
@@ -167,17 +209,23 @@ class MasterCommonService:
                     if db_col:
                         column_mapping[excel_col] = db_col
             
-            # Check if 'value' column exists (critical field for master tables)
-            value_column = None
-            for excel_col, db_col in column_mapping.items():
-                if db_col.lower() == 'value':
-                    value_column = excel_col
-                    break
+            # Get required (non-nullable) columns dynamically from the model
+            required_columns = self._get_required_columns(model)
+            required_columns_lower = {col.lower() for col in required_columns}
             
-            if not value_column:
+            # Check if all required columns are present in Excel
+            mapped_db_columns_lower = {db_col.lower() for db_col in column_mapping.values()}
+            missing_required_columns = required_columns_lower - mapped_db_columns_lower
+            
+            if missing_required_columns:
+                # Find the actual column names (preserve case) for error message
+                missing_columns = [
+                    next((col for col in required_columns if col.lower() == missing_lower), missing_lower)
+                    for missing_lower in missing_required_columns
+                ]
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Excel file must contain a 'value' column (case-insensitive). "
+                    detail=f"Excel file must contain all required columns: {', '.join(sorted(missing_columns))}. "
                            f"Found columns: {', '.join(df.columns.tolist())}"
                 )
             
@@ -197,9 +245,9 @@ class MasterCommonService:
                         
                         # Handle NaN values - skip if NaN (allow optional fields)
                         if pd.isna(value):
-                            # Only raise error if it's the 'value' field (required)
-                            if db_col.lower() == 'value':
-                                raise ValueError(f"Required field 'value' is empty in row {index + 2}")
+                            # Check if this is a required field
+                            if db_col.lower() in required_columns_lower:
+                                raise ValueError(f"Required field '{db_col}' is empty in row {index + 2}")
                             continue
                         
                         # Convert value to string and strip whitespace
@@ -209,14 +257,30 @@ class MasterCommonService:
                     if 'created_by' not in record_data and created_by:
                         record_data['created_by'] = created_by
                     
-                    # Check for duplicate value (unique constraint)
-                    value_to_check = record_data.get('value')
-                    if value_to_check:
-                        existing = self.db.query(model).filter(model.value == value_to_check).first()
-                        if existing:
-                            skipped_count += 1
-                            errors.append(f"Row {index + 2}: Value '{value_to_check}' already exists (skipped)")
-                            continue
+                    # Check for duplicates based on unique constraints
+                    # Try to find a unique identifier field (commonly 'value' for master tables)
+                    # If 'value' exists, use it; otherwise, check if there's a unique constraint
+                    unique_check_field = None
+                    if 'value' in record_data:
+                        unique_check_field = 'value'
+                    elif hasattr(model, 'value'):
+                        # Model has value field but it's not in Excel data
+                        pass
+                    else:
+                        # For tables without 'value', check if there are unique constraints
+                        # We'll let the database handle unique constraint violations
+                        pass
+                    
+                    if unique_check_field and record_data.get(unique_check_field):
+                        value_to_check = record_data[unique_check_field]
+                        if hasattr(model, unique_check_field):
+                            existing = self.db.query(model).filter(
+                                getattr(model, unique_check_field) == value_to_check
+                            ).first()
+                            if existing:
+                                skipped_count += 1
+                                errors.append(f"Row {index + 2}: {unique_check_field.title()} '{value_to_check}' already exists (skipped)")
+                                continue
                     
                     # Create new record
                     new_record = model(**record_data)
@@ -268,6 +332,7 @@ class MasterCommonService:
     def delete_all_by_table_name(self, table_name: str) -> Dict[str, Any]:
         """
         Generic method to delete all records from a master table by table name.
+        Model is discovered dynamically from SQLAlchemy registry.
         
         Args:
             table_name: Name of the master table
@@ -275,8 +340,11 @@ class MasterCommonService:
         Returns:
             Dictionary with deletion results including count of deleted records
         """
-        table_config = self._validate_table_name(table_name)
-        model = table_config["model"]
+        try:
+            # Dynamically get model class
+            model = self._get_model_by_table_name(table_name)
+        except HTTPException:
+            raise
         
         try:
             # Get count of records before deletion

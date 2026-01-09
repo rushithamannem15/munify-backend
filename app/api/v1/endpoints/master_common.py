@@ -16,12 +16,16 @@ def get_master_data_by_table(
     """
     Common GET endpoint to retrieve all data from any master table.
     
-    Valid table names:
-    - funding_type_master
-    - mode_of_implementation_master
-    - ownership_master
-    - project_category_master
-    - project_stage_master
+    **Dynamic Table Discovery**: This endpoint works with any table that:
+    1. Is registered in the `master_table_list` table
+    2. Has a corresponding SQLAlchemy model in the codebase
+    
+    To add a new master table:
+    1. Create the SQLAlchemy model with the table name
+    2. Add a record to `master_table_list` with the table name
+    3. No code changes needed - the system will automatically discover it!
+    
+    The table name must match exactly the `__tablename__` attribute of the model.
     """
     service = MasterCommonService(db)
     data = service.get_all_by_table_name(table_name)
@@ -46,8 +50,10 @@ def bulk_insert_from_excel(
     that matches a database column name (case-insensitive) will be automatically processed.
     No code changes needed when adding new columns to Excel - just add them to the Excel file!
     
-    **Required Column**: 
-    - 'value' (String, unique) - Must be present in Excel
+    **Required Columns**: 
+    - All non-nullable columns in the database table must be present in Excel
+    - The system automatically detects which columns are required based on the table schema
+    - Common required columns: 'value' (for simple master tables), 'state' and 'municipality' (for mapping tables), etc.
     
     **Optional Columns** (automatically detected if present in Excel):
     - 'created_by' (String) - If not in Excel, uses X-Created-By header if provided
@@ -59,12 +65,14 @@ def bulk_insert_from_excel(
     - 'created_at' - Auto-generated timestamp
     - 'updated_at' - Auto-generated timestamp
     
-    Valid table names:
-    - funding_type_master
-    - mode_of_implementation_master
-    - ownership_master
-    - project_category_master
-    - project_stage_master
+    **Dynamic Table Discovery**: This endpoint works with any table that:
+    1. Is registered in the `master_table_list` table
+    2. Has a corresponding SQLAlchemy model in the codebase
+    
+    To add a new master table:
+    1. Create the SQLAlchemy model with the table name
+    2. Add a record to `master_table_list` with the table name
+    3. No code changes needed - the system will automatically discover it!
     
     Note: Column names are case-insensitive. 'Value', 'VALUE', or 'value' all work.
     """
@@ -98,12 +106,14 @@ def delete_all_master_data_by_table(
     **Note**: If records from this master table are referenced by other tables through
     foreign key constraints, the deletion will fail with a 409 Conflict error.
     
-    Valid table names:
-    - funding_type_master
-    - mode_of_implementation_master
-    - ownership_master
-    - project_category_master
-    - project_stage_master
+    **Dynamic Table Discovery**: This endpoint works with any table that:
+    1. Is registered in the `master_table_list` table
+    2. Has a corresponding SQLAlchemy model in the codebase
+    
+    To add a new master table:
+    1. Create the SQLAlchemy model with the table name
+    2. Add a record to `master_table_list` with the table name
+    3. No code changes needed - the system will automatically discover it!
     """
     service = MasterCommonService(db)
     result = service.delete_all_by_table_name(table_name)

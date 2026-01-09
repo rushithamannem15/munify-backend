@@ -58,6 +58,24 @@ class OwnershipMasterResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class MasterTableListCreate(BaseModel):
+    table_name: str
+
+
+class MasterTableListUpdate(BaseModel):
+    table_name: Optional[str] = None
+
+
+class MasterTableListResponse(BaseModel):
+    id: int
+    table_name: str
+    created_at: Optional[datetime] = None
+    created_by: Optional[str] = None
+    updated_at: Optional[datetime] = None
+    updated_by: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
 
 class MasterListResponse(BaseModel):
     status: str
