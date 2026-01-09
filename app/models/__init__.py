@@ -26,6 +26,7 @@ from app.models.state_municipality_mapping import StateMunicipalityMapping
 from app.models.fee_category_exemption import FeeCategoryExemption
 from app.models.question import Question, QuestionReply
 from app.models.question_reply_document import QuestionReplyDocument
+from app.models.fee_configuration import FeeConfiguration
 
 # Export all models for convenience
 __all__ = [
@@ -50,4 +51,5 @@ __all__ = [
     "PerdixOrgDetail",
     "StateMunicipalityMapping",
     "FeeCategoryExemption",
+    "FeeConfiguration",
 ]

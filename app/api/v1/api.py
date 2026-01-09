@@ -18,6 +18,7 @@ from app.api.v1.endpoints import (
     files,
     fee_category_exemptions,
     statistics,
+    fee_configurations,
 )
 
 api_router = APIRouter()
@@ -40,3 +41,4 @@ api_router.include_router(perdix.router, prefix="/perdix", tags=["perdix"])
 api_router.include_router(files.router, prefix="/files", tags=["files"])
 api_router.include_router(fee_category_exemptions.router, prefix="/fee-category-exemptions", tags=["fee-category-exemptions"])
 api_router.include_router(statistics.router, prefix="/statistics", tags=["statistics"])
+api_router.include_router(fee_configurations.router, prefix="/fee-configurations", tags=["fee-configurations"])
