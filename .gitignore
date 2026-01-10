@@ -68,5 +68,5 @@ Thumbs.db
 
 # Uvicorn / runtime
 uvicorn.log
-alembic/versions/*.py
+# alembic/versions/*.py
 storage/

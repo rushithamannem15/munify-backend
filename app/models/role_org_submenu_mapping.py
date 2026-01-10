@@ -13,7 +13,7 @@ class RoleOrgSubmenuMapping(Base):
     __tablename__ = "perdix_mp_role_org_submenu_mapping"
     
     id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
-    role_id = Column(BigInteger, ForeignKey("perdix_mp_roles_master.id", ondelete="CASCADE"), nullable=False, index=True)  # References perdix_mp_roles_master.id
+    role_id = Column(BigInteger, nullable=False, index=True)  # References perdix_mp_roles_master.id (external Perdix table, no FK constraint)
     org_type = Column(String(50), nullable=False, index=True)  # Organization type: 'municipality', 'lender', 'admin', 'government'
     submenu_id = Column(BigInteger, ForeignKey("perdix_mp_submenu_master.id", ondelete="CASCADE"), nullable=False, index=True)
     status = Column(String(50), nullable=False, server_default='A')  # 'A' = Active, 'I' = Inactive (for soft-delete capability)
@@ -30,7 +30,7 @@ class RoleOrgSubmenuMapping(Base):
     # Constraints and indexes
     __table_args__ = (
         UniqueConstraint('role_id', 'org_type', 'submenu_id', name='uq_role_org_submenu_mapping'),
-        CheckConstraint("org_type IN ('municipality', 'lender', 'admin', 'government')", name="check_org_type"),
+        CheckConstraint("org_type IN ('municipality', 'lender', 'munify', 'government')", name="check_org_type"),
         CheckConstraint("status IN ('A', 'I')", name="check_mapping_status"),
         Index('idx_role_org_type', 'role_id', 'org_type'),  # Composite index for faster queries
     )

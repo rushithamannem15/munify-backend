@@ -19,6 +19,7 @@ from app.api.v1.endpoints import (
     fee_category_exemptions,
     statistics,
     fee_configurations,
+    menus,
 )
 
 api_router = APIRouter()
@@ -42,3 +43,4 @@ api_router.include_router(files.router, prefix="/files", tags=["files"])
 api_router.include_router(fee_category_exemptions.router, prefix="/fee-category-exemptions", tags=["fee-category-exemptions"])
 api_router.include_router(statistics.router, prefix="/statistics", tags=["statistics"])
 api_router.include_router(fee_configurations.router, prefix="/fee-configurations", tags=["fee-configurations"])
+api_router.include_router(menus.router, prefix="/menus", tags=["menus"])
