@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision: str = 'insert_menu_data'
-down_revision: Union[str, None] = None
+down_revision: Union[str, None] = '50821e3e34c9'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
